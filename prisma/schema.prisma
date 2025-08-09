@@ -1,0 +1,320 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String         @id @default(uuid())
+  name          String
+  email         String         @unique
+  password      String?
+  role          Role           @default(EDITOR)
+  avatar        String?
+  bio           String?
+  specialty     String?        // Editor specialty (Gaming & Tech, Travel & Lifestyle, etc.)
+  rating        Float?         // Editor rating (1-5 stars)
+  availability  String?        // Available, Busy, Away
+  lastActive    DateTime?      // Last activity timestamp
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  oauthProvider OAuthProvider?
+  
+  // YouTube-specific fields
+  channelName   String?        // YouTube channel name
+  subscribers   String?        // Subscriber count (e.g., "250K")
+  
+  // Relationships
+  youtubeProjects Project[]       @relation("YouTuberProjects")
+  editedProjects Project[]       @relation("EditorProjects")
+  uploadedFiles File[]
+  sentMessages  Message[]       @relation("SentMessages")
+  notifications Notification[]
+  projectTimeline ProjectTimeline[]
+  
+  @@map("users")
+}
+
+model Project {
+  id              String    @id @default(uuid())
+  title           String
+  videoTitle      String    // YouTube video title
+  description     String?   // Internal project description
+  videoDescription String?  // YouTube video description
+  keywords        String[]  // YouTube keywords/tags
+  visibility      Visibility @default(PUBLIC) // YouTube visibility
+  thumbnail       String?   // Thumbnail URL
+  instructions    String?   // Private instructions (YouTuber only)
+  status          Status    @default(DRAFT)
+  progress        Int       @default(0) // Progress percentage (0-100)
+  projectType     ProjectType @default(SINGLE) // Single video or series
+  
+  // Dates
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  dueDate         DateTime?
+  
+  // Relationships
+  youtuberId      String
+  editorId        String?
+  youtuber        User      @relation("YouTuberProjects", fields: [youtuberId], references: [id])
+  editor          User?     @relation("EditorProjects", fields: [editorId], references: [id])
+  
+  // Related data
+  files           File[]
+  messages        Message[]
+  permissions     ProjectPermission?
+  timeline        ProjectTimeline[]
+  
+  @@map("projects")
+}
+
+model ProjectPermission {
+  id            String  @id @default(uuid())
+  projectId     String  @unique
+  fullAccess    Boolean @default(true)
+  uploadAccess  Boolean @default(true)
+  downloadAccess Boolean @default(true)
+  shareAccess   Boolean @default(false)
+  
+  project       Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  @@map("project_permissions")
+}
+
+model File {
+  id         String   @id @default(uuid())
+  projectId  String
+  uploaderId String
+  fileType   FileType
+  fileUrl    String
+  fileName   String
+  fileSize   String   // Changed to String to handle "2.4 GB" format
+  duration   String?  // Video duration (e.g., "15:24")
+  version    String?  // Version identifier (v1, v2, etc.)
+  status     FileStatus? // For edited files: review, approved, etc.
+  uploadedAt DateTime @default(now())
+  
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  uploader   User     @relation(fields: [uploaderId], references: [id])
+  
+  @@map("files")
+}
+
+model Message {
+  id        String   @id @default(uuid())
+  projectId String
+  senderId  String
+  content   String
+  messageType MessageType @default(TEXT) // TEXT, FILE, SYSTEM
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sender    User     @relation("SentMessages", fields: [senderId], references: [id])
+  
+  @@map("messages")
+}
+
+model ProjectTimeline {
+  id        String   @id @default(uuid())
+  projectId String
+  userId    String?  // User who performed the action
+  event     String   // Description of the event
+  eventType TimelineEventType
+  metadata  Json?    // Additional event data
+  createdAt DateTime @default(now())
+  
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user      User?    @relation(fields: [userId], references: [id])
+  
+  @@map("project_timeline")
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  type      NotificationType
+  title     String           // Notification title
+  message   String           // Notification content
+  priority  NotificationPriority @default(MEDIUM)
+  isRead    Boolean          @default(false)
+  projectId String?          // Related project (optional)
+  senderId  String?          // User who triggered the notification (optional)
+  metadata  Json?            // Additional notification data
+  createdAt DateTime         @default(now())
+  
+  user      User             @relation(fields: [userId], references: [id])
+  
+  @@map("notifications")
+}
+
+// Analytics model for tracking YouTube performance
+model VideoAnalytics {
+  id            String   @id @default(uuid())
+  projectId     String?  // Link to project if applicable
+  videoId       String   @unique // YouTube video ID
+  title         String
+  views         Int      @default(0)
+  likes         Int      @default(0)
+  comments      Int      @default(0)
+  subscribers   Int      @default(0) // Subscriber count at time of upload
+  watchTime     Int      @default(0) // In minutes
+  engagement    Float    @default(0) // Engagement rate percentage
+  publishedAt   DateTime
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@map("video_analytics")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+}
+
+model ChecklistItem {
+  id         String   @id @default(uuid())
+  messageId  String
+  content    String
+  isCompleted Boolean @default(false)
+
+  message    Message  @relation(fields: [messageId], references: [id])
+  
+  @@map("checklist_items")
+}
+
+model PinnedNote {
+  id         String   @id @default(uuid())
+  projectId  String
+  createdBy  String
+  content    String
+  isPinned   Boolean @default(true)
+  createdAt  DateTime @default(now())
+
+  project    Project  @relation(fields: [projectId], references: [id])
+  creator    User     @relation(fields: [createdBy], references: [id])
+
+  @@map("pinned_notes")
+}
+
+model Milestone {
+  id           String   @id @default(uuid())
+  projectId    String
+  title        String
+  description  String?
+  dueDate      DateTime?
+  isCompleted  Boolean  @default(false)
+  completedAt  DateTime?
+
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("milestones")
+}
+
+// Enums
+enum Role {
+  YOUTUBER
+  EDITOR
+}
+
+enum Status {
+  DRAFT
+  IN_PROGRESS
+  REVIEW
+  APPROVED
+  COMPLETED
+  ARCHIVED
+}
+
+enum ProjectType {
+  SINGLE
+  SERIES
+}
+
+enum Visibility {
+  PUBLIC
+  UNLISTED
+  PRIVATE
+}
+
+enum FileType {
+  RAW
+  EDITED
+  FINAL
+  THUMBNAIL
+  AUDIO
+  OTHER
+}
+
+enum FileStatus {
+  UPLOADED
+  PROCESSING
+  REVIEW
+  APPROVED
+  REJECTED
+}
+
+enum MessageType {
+  TEXT
+  FILE
+  SYSTEM
+  NOTIFICATION
+}
+
+enum TimelineEventType {
+  CREATED
+  UPDATED
+  STATUS_CHANGED
+  FILE_UPLOADED
+  MESSAGE_SENT
+  EDITOR_ASSIGNED
+  EDITOR_REMOVED
+  APPROVED
+  COMPLETED
+  ARCHIVED
+}
+
+enum NotificationType {
+  MESSAGE
+  FILE_UPLOAD
+  STATUS_CHANGE
+  INVITE
+  PROJECT_INVITATION
+  COLLABORATION_REQUEST
+  DEADLINE_REMINDER
+  PAYMENT_RECEIVED
+  YOUTUBE_UPLOAD
+  ANALYTICS
+  SYSTEM
+  ACHIEVEMENT
+  SKILL_RECOMMENDATION
+  PROJECT_APPROVED
+  REVIEW_REQUEST
+  FILE_SHARED
+}
+
+enum NotificationPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum OAuthProvider {
+  GOOGLE
+  EMAIL
+}
