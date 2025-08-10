@@ -24,20 +24,24 @@ model User {
   lastActive    DateTime?      // Last activity timestamp
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
-  oauthProvider OAuthProvider?
-  
+
+  oauthProvider OAuthProvider  @default(EMAIL)
+  googleId      String?        @unique
+  refreshToken  RefreshToken[]
+
   // YouTube-specific fields
   channelName   String?        // YouTube channel name
   subscribers   String?        // Subscriber count (e.g., "250K")
   
   // Relationships
   youtubeProjects Project[]       @relation("YouTuberProjects")
-  editedProjects Project[]       @relation("EditorProjects")
-  uploadedFiles File[]
-  sentMessages  Message[]       @relation("SentMessages")
-  notifications Notification[]
+  editedProjects  Project[]       @relation("EditorProjects")
+  uploadedFiles   File[]
+  sentMessages    Message[]       @relation("SentMessages")
+  notifications   Notification[]
   projectTimeline ProjectTimeline[]
-  
+  pinnedNotes     PinnedNote[]
+
   @@map("users")
 }
 
@@ -71,6 +75,8 @@ model Project {
   messages        Message[]
   permissions     ProjectPermission?
   timeline        ProjectTimeline[]
+  pinnedNotes     PinnedNote[]
+  milestones      Milestone[]
   
   @@map("projects")
 }
@@ -118,6 +124,7 @@ model Message {
   
   project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   sender    User     @relation("SentMessages", fields: [senderId], references: [id])
+  checklistItem   ChecklistItem[]
   
   @@map("messages")
 }
@@ -295,8 +302,7 @@ enum NotificationType {
   INVITE
   PROJECT_INVITATION
   COLLABORATION_REQUEST
-  DEADLINE_REMINDER
-  PAYMENT_RECEIVED
+  DEADLINE_REMINDER 
   YOUTUBE_UPLOAD
   ANALYTICS
   SYSTEM
