@@ -1,11 +1,16 @@
 {
   "name": "ytcollab-backend",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "build/index.js",
+  "type": "commonjs",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node build/index.js",
+    "dev": "nodemon --watch src --exec ts-node src/index.ts",
+    "build": "rimraf build && tsc",
+    "lint": "eslint . --ext .ts",
+    "check-types": "tsc --noEmit"
   },
-  "author": "",
+  "author": "Bashir",
   "license": "ISC",
   "description": "",
   "dependencies": {
@@ -16,6 +21,15 @@
     "express": "^5.1.0",
     "morgan": "^1.10.1",
     "multer": "^2.0.2",
-    "prisma": "^6.13.0"
+    "prisma": "^6.13.0",
+    "winston": "^3.17.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.3",
+    "@types/node": "^24.2.1",
+    "nodemon": "^3.1.10",
+    "rimraf": "^6.0.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.2"
   }
 }
