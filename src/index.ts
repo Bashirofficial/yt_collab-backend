@@ -1,26 +1,15 @@
-import express from "express";
-import prisma from "./db";
-import { errorHandler } from "./middlewares/errorHandler.middleware";
+import { connectDB } from "./db";
+import { app } from "./app";
 
-const app = express();
-const PORT = process.env.PORT || 3000;
+import dotenv from "dotenv";
+dotenv.config();
 
-app.use(express.json());
+const PORT = process.env.PORT || 5000;
 
-app.use(errorHandler);
+(async () => {
+  await connectDB();
 
-// Simple test route
-app.get("/", async (req, res) => {
-  try {
-    // Test DB connection by running a simple query
-    await prisma.$connect();
-    res.send("✅ Database connected successfully!");
-  } catch (err) {
-    console.error("❌ Database connection failed:", err);
-    res.status(500).send("Database connection failed");
-  }
-});
-
-app.listen(PORT, () => {
-  console.log(`🚀 Server is running on http://localhost:${PORT}`);
-});
+  app.listen(PORT, () => {
+    console.log(`🚀 Server is running on http://localhost:${PORT}`);
+  });
+})();
