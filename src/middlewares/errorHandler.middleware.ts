@@ -1,30 +1,27 @@
-// errorHandler.ts
 import { Request, Response, NextFunction } from "express";
 import { ApiError } from "../utils/ApiError";
 
-const errorHandler = (
+export const errorHandler = (
   err: Error,
   req: Request,
   res: Response,
   next: NextFunction
 ) => {
+  console.error(err);
+
   if (err instanceof ApiError) {
     return res.status(err.statusCode).json({
-      success: err.success,
+      success: false,
       message: err.message,
-      errors: err.errors,
-      data: err.data,
+      errors: err.errors || [],
+      stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
     });
   }
 
-  // fallback for unhandled errors
-  console.error(err); // for debugging
   return res.status(500).json({
     success: false,
     message: "Internal Server Error",
     errors: [],
-    data: null,
+    stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
   });
 };
-
-export { errorHandler };
