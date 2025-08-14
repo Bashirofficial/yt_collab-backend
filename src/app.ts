@@ -18,11 +18,14 @@ app.use(express.urlencoded({ extended: true, limit: "16kb" })); //simply urlenco
 app.use(express.static("public"));
 app.use(cookieParser());
 app.use(morgan("dev"));
-app.use(bodyParser.json());
 
 app.get("/", (req, res) => {
   res.send("🚀 API is running");
 });
+
+import userRouter from "./routes/user.route";
+
+app.use("/api/v1/users", userRouter);
 
 app.use(errorHandler);
 
