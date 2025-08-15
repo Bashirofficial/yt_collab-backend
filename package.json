@@ -23,6 +23,7 @@
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.1",
     "multer": "^2.0.2",
+    "passport-google-oauth20": "^2.0.0",
     "prisma": "^6.13.0",
     "winston": "^3.17.0"
   },
@@ -35,6 +36,7 @@
     "@types/morgan": "^1.9.10",
     "@types/multer": "^2.0.0",
     "@types/node": "^24.2.1",
+    "@types/passport-google-oauth20": "^2.0.16",
     "nodemon": "^3.1.10",
     "rimraf": "^6.0.1",
     "ts-node": "^10.9.2",
