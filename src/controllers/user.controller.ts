@@ -6,7 +6,6 @@ import { ApiError } from "../utils/ApiError";
 import { ApiResponse } from "../utils/ApiResponse";
 import { AsyncHandler } from "../utils/AsyncHandler";
 import { generateAccessAndRefreshToken } from "../services/auth.service";
-import { AuthRequest } from "../middlewares/auth.middleware";
 
 const refreshAccessToken = AsyncHandler(async (req, res) => {
   const incomingRefreshToken =
@@ -31,7 +30,7 @@ const refreshAccessToken = AsyncHandler(async (req, res) => {
       include: { user: true },
     });
 
-    if (!storedToken || storedToken.userId !== incomingRefreshToken) {
+    if (!storedToken || storedToken.token !== incomingRefreshToken) {
       throw new ApiError(401, "Invalid or expired refresh token");
     }
 
@@ -135,13 +134,17 @@ const login = AsyncHandler(async (req: Request, res: Response) => {
     );
 });
 
-const logout = AsyncHandler(async (req: AuthRequest, res: Response) => {
-  if (!req.user || !req.user.userId) {
+const logout = AsyncHandler(async (req: Request, res: Response) => {
+  if (!req.user) {
     throw new ApiError(401, "Unauthorized: User not authenticated.");
   }
 
+  const authenticatedReq = req as Request & {
+    user: { id: string; email: string; role: any };
+  };
+
   await prisma.refreshToken.deleteMany({
-    where: { userId: req.user.userId },
+    where: { userId: authenticatedReq.user.id },
   });
 
   const options: CookieOptions = {
