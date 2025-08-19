@@ -1,6 +1,6 @@
 // middlewares/authorizeRoles.ts
 import { Request, Response, NextFunction } from "express";
-import ApiError from "../utils/ApiError";
+import { ApiError } from "../utils/ApiError";
 
 export const authorizeRoles = (...allowedRoles: string[]) => {
   return (req: Request, res: Response, next: NextFunction) => {
