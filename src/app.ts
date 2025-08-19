@@ -1,9 +1,10 @@
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
-import bodyParser from "body-parser";
 import morgan from "morgan";
 import { errorHandler } from "./middlewares/errorHandler.middleware";
+import passport from "./controllers/googleAuth.controller";
+import session from "express-session";
 
 const app = express();
 
@@ -18,15 +19,26 @@ app.use(express.urlencoded({ extended: true, limit: "16kb" })); //simply urlenco
 app.use(express.static("public"));
 app.use(cookieParser());
 app.use(morgan("dev"));
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET || "secret",
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      secure: process.env.NODE_ENV === "production",
+      maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    },
+  })
+);
+app.use(passport.initialize());
+app.use(passport.session());
 
 app.get("/", (req, res) => {
   res.send("🚀 API is running");
 });
 
 import userRouter from "./routes/user.route";
-
 app.use("/api/v1/users", userRouter);
-
 app.use(errorHandler);
 
 export { app };
