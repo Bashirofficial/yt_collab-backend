@@ -47,18 +47,18 @@ model User {
 
 model Project {
   id              String    @id @default(uuid())
+  projectDisplayId String   @unique @default("")
   title           String
   videoTitle      String    // YouTube video title
   description     String?   // Internal project description
   videoDescription String?  // YouTube video description
-  keywords        String[]  // YouTube keywords/tags
+  keywords        String[] @default([]) // YouTube keywords/tags
   visibility      Visibility @default(PUBLIC) // YouTube visibility
   thumbnail       String?   // Thumbnail URL
   instructions    String?   // Private instructions (YouTuber only)
   status          Status    @default(DRAFT)
   progress        Int       @default(0) // Progress percentage (0-100)
   projectType     ProjectType @default(SINGLE) // Single video or series
-  
   // Dates
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
