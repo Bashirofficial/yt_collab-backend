@@ -47,7 +47,7 @@ model User {
 
 model Project {
   id              String    @id @default(uuid())
-  projectDisplayId String   @unique @default("")
+  projectDisplayId String   @unique
   title           String
   videoTitle      String    // YouTube video title
   description     String?   // Internal project description
@@ -78,6 +78,8 @@ model Project {
   pinnedNotes     PinnedNote[]
   milestones      Milestone[]
   
+  @@index([projectDisplayId])
+  @@index([youtuberId])
   @@map("projects")
 }
 
@@ -90,6 +92,7 @@ model ProjectPermission {
   shareAccess   Boolean @default(false)
   
   project       Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
   
   @@map("project_permissions")
 }
@@ -110,6 +113,7 @@ model File {
   project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   uploader   User     @relation(fields: [uploaderId], references: [id])
   
+  @@index([projectId])
   @@map("files")
 }
 
@@ -125,7 +129,9 @@ model Message {
   project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   sender    User     @relation("SentMessages", fields: [senderId], references: [id])
   checklistItem   ChecklistItem[]
-  
+
+  @@index([projectId])
+  @@index([senderId])
   @@map("messages")
 }
 
