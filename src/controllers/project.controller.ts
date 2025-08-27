@@ -31,7 +31,7 @@ const createProject = AsyncHandler(async (req: Request, res: Response) => {
   if (!req.user) {
     throw new ApiError(401, "Unauthorized: User not authenticated.");
   }
-  if (!req.user.role !== "YOUTUBER") {
+  if (req.user.role !== "YOUTUBER") {
     throw new ApiError(
       403,
       "Access denied: Only YouTubers can create projects"
@@ -86,4 +86,76 @@ const createProject = AsyncHandler(async (req: Request, res: Response) => {
     );
 });
 
-export { createProject };
+const editProject = AsyncHandler(async (req, res) => {
+  const { projectId } = req.params;
+  const { error, value } = updateProjectSchema.validate(req.body);
+
+  if (error) {
+    throw new ApiError(400, `Validation error: ${error.details[0].message}`);
+  }
+
+  if (!req.user) {
+    throw new ApiError(401, "Unauthorized: User not authenticated.");
+  }
+  if (req.user.role !== "YOUTUBER") {
+    throw new ApiError(403, "Access denied: Only YouTubers can edit projects");
+  }
+
+  if (!projectId) {
+    throw new ApiError(400, "Project ID is invalid");
+  }
+
+  const existingProject = await ProjectService.findProjectByIdAndOwner(
+    projectId,
+    req.user!.id
+  );
+
+  if (!existingProject) {
+    throw new ApiError(
+      404,
+      "Project not found or you don't have permission to edit it"
+    );
+  }
+
+  const {
+    fullAccess,
+    uploadAccess,
+    downloadAccess,
+    shareAccess,
+    ...projectData
+  } = value;
+
+  const permissionData = {
+    fullAccess,
+    uploadAccess,
+    downloadAccess,
+    shareAccess,
+  };
+
+  const updateData = ProjectService.buildUpdateData(projectData);
+  const permissionUpdate = ProjectService.buildPermissionUpdate(
+    permissionData,
+    existingProject.id
+  );
+
+  if (permissionUpdate) {
+    updateData.permissions = permissionUpdate;
+  }
+
+  const updatedProject = await ProjectService.updateProject(
+    existingProject.id,
+    updateData
+  );
+
+  return res
+    .status(201)
+    .json(
+      new ApiResponse(
+        200,
+        updatedProject,
+        "Project has been successully updated"
+      )
+    );
+});
+
+export { createProject, editProject };
