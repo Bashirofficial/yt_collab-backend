@@ -38,7 +38,9 @@ app.get("/", (req, res) => {
 });
 
 import userRouter from "./routes/user.route";
+import projectRouter from "./routes/project.route";
 app.use("/api/v1/users", userRouter);
+app.use("/api/v1/projects", projectRouter);
 app.use(errorHandler);
 
 export { app };
