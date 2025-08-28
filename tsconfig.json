@@ -14,8 +14,14 @@
     "removeComments": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "typeRoots": ["./src/types", "./node_modules/@types"]
+    "typeRoots": ["./src/types", "./node_modules/@types"],
+    "types": ["node", "express"]
   },
-  "include": ["src/**/*", "src/types/**/*", "src/**/*.d.ts"],
+  "include": [
+    "src/**/*",
+    "src/types/**/*",
+    "src/**/*.d.ts",
+    "src/types/*.d.ts"
+  ],
   "exclude": ["build", "node_modules", ".templates"]
 }
