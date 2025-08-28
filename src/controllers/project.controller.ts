@@ -1,14 +1,9 @@
-import { Request, Response, CookieOptions } from "express";
+import { Request, Response } from "express";
 import prisma from "../db";
 import { ApiError } from "../utils/ApiError";
 import { ApiResponse } from "../utils/ApiResponse";
 import { AsyncHandler } from "../utils/AsyncHandler";
-import { customAlphabet } from "nanoid";
-
-const generateProjectCode = () => {
-  const nanoid = customAlphabet("1234567890ABCDEF", 8);
-  return `PROJ_${nanoid()}`;
-};
+import generateProjectCode from "../utils/generateProjectCode";
 
 const createProject = AsyncHandler(async (req: Request, res: Response) => {
   const {
@@ -86,76 +81,179 @@ const createProject = AsyncHandler(async (req: Request, res: Response) => {
     );
 });
 
-const editProject = AsyncHandler(async (req, res) => {
-  const { projectId } = req.params;
-  const { error, value } = updateProjectSchema.validate(req.body);
-
-  if (error) {
-    throw new ApiError(400, `Validation error: ${error.details[0].message}`);
-  }
+const getProject = AsyncHandler(async (req: Request, res: Response) => {
+  const { projectDisplayId } = req.params;
 
   if (!req.user) {
     throw new ApiError(401, "Unauthorized: User not authenticated.");
   }
-  if (req.user.role !== "YOUTUBER") {
-    throw new ApiError(403, "Access denied: Only YouTubers can edit projects");
+
+  const project = await prisma.project.findUnique({
+    where: { projectDisplayId },
+    include: {
+      permissions: true,
+      youtuber: {
+        select: { id: true, name: true, email: true, role: true },
+      },
+      editor: {
+        select: { id: true, name: true, email: true, role: true },
+      },
+      files: {
+        select: {
+          id: true,
+          fileName: true,
+          fileSize: true,
+          fileType: true,
+          uploadedAt: true,
+        },
+      },
+    },
+  });
+
+  if (!project) {
+    throw new ApiError(404, "Project not found");
   }
 
-  if (!projectId) {
-    throw new ApiError(400, "Project ID is invalid");
-  }
+  // Check access permissions
+  const canAccess =
+    project.youtuberId === req.user.id || // Project owner
+    project.editorId === req.user.id; // Assigned editor
 
-  const existingProject = await ProjectService.findProjectByIdAndOwner(
-    projectId,
-    req.user!.id
-  );
-
-  if (!existingProject) {
+  if (!canAccess) {
     throw new ApiError(
-      404,
-      "Project not found or you don't have permission to edit it"
+      403,
+      "Access denied: You don't have permission to view this project"
     );
   }
-
-  const {
-    fullAccess,
-    uploadAccess,
-    downloadAccess,
-    shareAccess,
-    ...projectData
-  } = value;
-
-  const permissionData = {
-    fullAccess,
-    uploadAccess,
-    downloadAccess,
-    shareAccess,
-  };
-
-  const updateData = ProjectService.buildUpdateData(projectData);
-  const permissionUpdate = ProjectService.buildPermissionUpdate(
-    permissionData,
-    existingProject.id
-  );
-
-  if (permissionUpdate) {
-    updateData.permissions = permissionUpdate;
-  }
-
-  const updatedProject = await ProjectService.updateProject(
-    existingProject.id,
-    updateData
-  );
 
   return res
-    .status(201)
-    .json(
-      new ApiResponse(
-        200,
-        updatedProject,
-        "Project has been successully updated"
-      )
-    );
+    .status(200)
+    .json(new ApiResponse(200, project, "Project retrieved successfully"));
 });
 
-export { createProject, editProject };
+const editProject = AsyncHandler(async (req: Request, res: Response) => {
+  const { projectDisplayId } = req.params;
+  const {
+    title,
+    videoTitle,
+    description,
+    videoDescription,
+    keywords,
+    visibility,
+    thumbnail,
+    instructions,
+    projectType,
+    dueDate,
+    status,
+    progress,
+    fullAccess,
+    uploadAccess,
+    downloadAccess,
+    shareAccess,
+  } = req.body;
+
+  if (!req.user) {
+    throw new ApiError(401, "Unauthorized: User not authenticated.");
+  }
+
+  const existingProject = await prisma.project.findUnique({
+    where: { projectDisplayId },
+    include: { permissions: true },
+  });
+
+  if (!existingProject) {
+    throw new ApiError(404, "Project not found");
+  }
+
+  if (
+    req.user.role !== "YOUTUBER" &&
+    req.user.id !== existingProject.youtuberId
+  ) {
+    if (visibility !== undefined || instructions !== undefined) {
+      throw new ApiError(
+        403,
+        "Access denied: Only project owner can modify visibility and instructions"
+      );
+    }
+  }
+
+  try {
+    // ✅ Use transaction to update both project and permissions atomically
+    const result = await prisma.$transaction(async (tx) => {
+      // Build project update data
+      const updateData: any = {};
+
+      if (title !== undefined) updateData.title = title;
+      if (videoTitle !== undefined) updateData.videoTitle = videoTitle;
+      if (description !== undefined) updateData.description = description;
+      if (videoDescription !== undefined)
+        updateData.videoDescription = videoDescription;
+      if (keywords !== undefined) updateData.keywords = keywords || [];
+      if (visibility !== undefined) updateData.visibility = visibility;
+      if (thumbnail !== undefined) updateData.thumbnail = thumbnail;
+      if (instructions !== undefined) updateData.instructions = instructions;
+      if (projectType !== undefined) updateData.projectType = projectType;
+      if (status !== undefined) updateData.status = status;
+      if (progress !== undefined) {
+        if (progress < 0 || progress > 100) {
+          throw new ApiError(400, "Progress must be between 0 and 100");
+        }
+        updateData.progress = progress;
+      }
+      if (dueDate !== undefined) {
+        updateData.dueDate = dueDate ? new Date(dueDate) : null;
+      }
+
+      // Update project if there's data to update
+      if (Object.keys(updateData).length > 0) {
+        await tx.project.update({
+          where: { id: existingProject.id },
+          data: updateData,
+        });
+      }
+
+      // Update permissions if provided (only project owner can do this)
+      const hasPermissionUpdates =
+        fullAccess !== undefined ||
+        uploadAccess !== undefined ||
+        downloadAccess !== undefined ||
+        shareAccess !== undefined;
+
+      if (hasPermissionUpdates && existingProject.youtuberId === req.user!.id) {
+        await tx.projectPermission.update({
+          where: { projectId: existingProject.id },
+          data: {
+            ...(fullAccess !== undefined && { fullAccess }),
+            ...(uploadAccess !== undefined && { uploadAccess }),
+            ...(downloadAccess !== undefined && { downloadAccess }),
+            ...(shareAccess !== undefined && { shareAccess }),
+          },
+        });
+      }
+
+      // Return the updated project with all related data
+      return await tx.project.findUnique({
+        where: { id: existingProject.id },
+        include: {
+          permissions: true,
+          youtuber: {
+            select: { id: true, name: true, email: true, role: true },
+          },
+          editor: {
+            select: { id: true, name: true, email: true, role: true },
+          },
+        },
+      });
+    });
+
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(200, result, "Project has been successfully updated")
+      );
+  } catch (error: any) {
+    throw error;
+  }
+});
+
+export { createProject, getProject, editProject };
