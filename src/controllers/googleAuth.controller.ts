@@ -23,6 +23,7 @@ passport.use(
               email: profile.emails?.[0]?.value || "",
               googleId: profile.id,
               oauthProvider: "GOOGLE",
+              role: "YOUTUBER",
             },
           });
         }
