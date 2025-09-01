@@ -104,11 +104,15 @@ model File {
   fileType   FileType
   fileUrl    String
   fileName   String
-  fileSize   String   // Changed to String to handle "2.4 GB" format
+  fileSize   BigInt   
+  mimeType   String  
   duration   String?  // Video duration (e.g., "15:24")
   version    String?  // Version identifier (v1, v2, etc.)
   status     FileStatus? // For edited files: review, approved, etc.
+  thumbnailUrl String?  
+  metadata   Json?    // Additional properties
   uploadedAt DateTime @default(now())
+  updatedAt  DateTime @updatedAt
   
   project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   uploader   User     @relation(fields: [uploaderId], references: [id])
@@ -279,6 +283,7 @@ enum FileStatus {
   REVIEW
   APPROVED
   REJECTED
+  UPLOAD_FAILED
 }
 
 enum MessageType {
