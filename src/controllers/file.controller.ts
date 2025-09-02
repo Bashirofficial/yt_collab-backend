@@ -239,4 +239,75 @@ const uploadFile = AsyncHandler(async (req: Request, res: Response) => {
   });
 });
 
-export { uploadFile };
+// C2. Get files for a project
+const getProjectFiles = AsyncHandler(async (req: Request, res: Response) => {
+  const { projectId } = req.params;
+  const { fileType, status, page = 1, limit = 20 } = req.query;
+  const userId = req.user?.id;
+  if (!userId) {
+    throw new ApiError(401, "User not authenticated");
+  }
+
+  const project = await prisma.project.findFirst({
+    where: {
+      id: projectId,
+      OR: [{ youtuberId: userId }, { editorId: userId }],
+    },
+  });
+
+  if (!project) {
+    throw new ApiError(404, "Project not found or access denied");
+  }
+
+  const whereClause: any = { projectId };
+
+  if (fileType && typeof fileType === "string") {
+    whereClause.fileType = fileType.toUpperCase();
+  }
+
+  if (status && typeof status === "string") {
+    whereClause.status = status.toUpperCase();
+  }
+
+  const skip = (Number(page) - 1) * Number(limit);
+
+  const [files, totalCount] = await Promise.all([
+    prisma.file.findMany({
+      where: whereClause,
+      include: {
+        uploader: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+      },
+      orderBy: { uploadedAt: "desc" },
+      skip,
+      take: Number(limit),
+    }),
+    prisma.file.count({ where: whereClause }),
+  ]);
+
+  const totalPages = Math.ceil(totalCount / Number(limit));
+
+  return res.status(200).json(
+    new ApiResponse(
+      200,
+      {
+        files,
+        pagination: {
+          currentPage: Number(page),
+          totalPages,
+          totalCount,
+          hasNextPage: Number(page) < totalPages,
+          hasPrevPage: Number(page) > 1,
+        },
+      },
+      "Files retrieved successfully"
+    )
+  );
+});
+
+export { uploadFile, getProjectFiles };
