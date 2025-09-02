@@ -16,8 +16,9 @@ import path from "path";
 import ffmpeg from "fluent-ffmpeg";
 import fs from "fs";
 import { upload } from "../middlewares/multer.middleware";
+import multer from "multer";
 
-// CloudFlare R2 configuration
+//--------- CloudFlare R2 configuration ---------//
 const r2Client = new S3Client({
   region: "auto",
   endpoint: process.env.CLOUDFLARE_R2_ENDPOINT,
@@ -29,7 +30,8 @@ const r2Client = new S3Client({
 
 const BUCKET_NAME = process.env.CLOUDFLARE_R2_BUCKET_NAME!;
 
-// Helper function to get video duration
+//--------- Helper Functions (H) ---------//
+// H1. Helper function to get video duration
 const getVideoDuration = (buffer: Buffer): Promise<string> => {
   return new Promise((resolve, reject) => {
     const tempPath = path.join(__dirname, `temp_${uuidv4()}`);
@@ -59,7 +61,7 @@ const getVideoDuration = (buffer: Buffer): Promise<string> => {
   });
 };
 
-// Helper function to generate thumbnail for videos
+// H2. Helper function to generate thumbnail for videos
 const generateThumbnail = (buffer: Buffer): Promise<Buffer> => {
   return new Promise((resolve, reject) => {
     const tempInputPath = path.join(__dirname, `temp_input_${uuidv4()}`);
@@ -91,7 +93,7 @@ const generateThumbnail = (buffer: Buffer): Promise<Buffer> => {
   });
 };
 
-// Upload file to CloudFlare R2
+// H3. Upload file to CloudFlare R2
 const uploadToR2 = async (
   buffer: Buffer,
   fileName: string,
@@ -112,7 +114,7 @@ const uploadToR2 = async (
   return `${process.env.CLOUDFLARE_R2_PUBLIC_URL}/${key}`;
 };
 
-// Get file type based on mime type and upload context
+// H4. Get file type based on mime type and upload context
 const determineFileType = (
   mimeType: string,
   isEdited: boolean = false,
@@ -126,4 +128,115 @@ const determineFileType = (
   return "OTHER";
 };
 
-//
+//--------- Controllers (C) ---------//
+
+// C1. Upload file endpoint
+const uploadFile = AsyncHandler(async (req: Request, res: Response) => {
+  upload(req, res, async (err) => {
+    if (err instanceof multer.MulterError) {
+      throw new ApiError(400, `Upload error: ${err.message}`);
+    } else if (err) {
+      throw new ApiError(400, err.message);
+    }
+
+    if (!req.file) {
+      throw new ApiError(400, "No file uploaded");
+    }
+
+    const { projectId } = req.params;
+    const { version, isEdited = false, isFinal = false } = req.body;
+    const uploaderId = req.user?.id;
+
+    if (!uploaderId) {
+      throw new ApiError(401, "User not authenticated");
+    }
+
+    // Verify project exists and user has access
+    const project = await prisma.project.findFirst({
+      where: {
+        id: projectId,
+        OR: [{ youtuberId: uploaderId }, { editorId: uploaderId }],
+      },
+    });
+
+    if (!project) {
+      throw new ApiError(404, "Project not found or access denied");
+    }
+
+    try {
+      const file = req.file;
+      const fileExtension = path.extname(file.originalname);
+      const fileName = `${uuidv4()}${fileExtension}`;
+      const fileType = determineFileType(file.mimetype, isEdited, isFinal);
+
+      // Uploading main file to R2
+      const fileUrl = await uploadToR2(
+        file.buffer,
+        fileName,
+        file.mimetype,
+        projectId
+      );
+
+      let duration: string | null = null;
+      let thumbnailUrl: string | null = null;
+
+      //Process video files
+      if (file.mimetype.startsWith("video/")) {
+        try {
+          duration = await getVideoDuration(file.buffer);
+          const thumbnailBuffer = await generateThumbnail(file.buffer);
+          const thumbnailFileName = `${uuidv4()}_thumbnail.png`;
+          thumbnailUrl = await uploadToR2(
+            thumbnailBuffer,
+            thumbnailFileName,
+            "image/png",
+            projectId
+          );
+        } catch (error) {
+          console.warn("Failed to process video metadata: ", error);
+          duration = null;
+          thumbnailUrl = null;
+        }
+      }
+
+      const savedFile = await prisma.file.create({
+        data: {
+          projectId,
+          uploaderId,
+          fileType,
+          fileUrl,
+          fileName: file.originalname,
+          fileSize: BigInt(file.size),
+          mimeType: file.mimetype,
+          duration,
+          version,
+          status: "UPLOADED",
+          thumbnailUrl,
+          metadata: {
+            originalFileName: file.originalname,
+            uploadedFrom: req.ip,
+            userAgent: req.get("User-Agent"),
+          },
+        },
+        include: {
+          uploader: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
+      });
+
+      return res
+        .status(201)
+        .json(new ApiResponse(201, savedFile, "File uploaded successfully"));
+    } catch (error) {
+      console.error("File upload error: ", error);
+      throw new ApiError(500, "Failed to upload file");
+    }
+  });
+});
+
+export { uploadFile };
