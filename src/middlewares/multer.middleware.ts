@@ -1,6 +1,5 @@
 import multer from "multer";
 import { Request } from "express";
-import { ApiError } from "../utils/ApiError";
 
 const storage = multer.memoryStorage();
 
@@ -9,7 +8,11 @@ export const upload = multer({
   limits: {
     fileSize: 5 * 1024 * 1024 * 1024,
   },
-  fileFilter: (req: Request, file: Express.Multer.File, cb) => {
+  fileFilter: (
+    req: Request,
+    file: Express.Multer.File,
+    cb: (error: any, acceptFile: boolean) => void
+  ) => {
     const allowedMimeTypes = [
       "video/mp4",
       "video/avi",
@@ -28,7 +31,7 @@ export const upload = multer({
     if (allowedMimeTypes.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new ApiError(400, "Unsupported file type!"), false);
+      cb(new Error("Unsupported file type!"), false);
     }
   },
 }).single("file");
