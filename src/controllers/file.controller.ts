@@ -21,10 +21,10 @@ import multer from "multer";
 //--------- CloudFlare R2 configuration ---------//
 const r2Client = new S3Client({
   region: "auto",
-  endpoint: process.env.CLOUDFLARE_R2_ENDPOINT,
+  endpoint: process.env.CLOUDFLARE_R2_ENDPOINT as string,
   credentials: {
-    accessKeyId: process.env.CLOUDFLARE_R2_ACCESS_KEY_ID!,
-    secretAccessKey: process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY,
+    accessKeyId: process.env.CLOUDFLARE_R2_ACCESS_KEY_ID! as string,
+    secretAccessKey: process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY as string,
   },
 });
 
@@ -144,6 +144,7 @@ const uploadFile = AsyncHandler(async (req: Request, res: Response) => {
     }
 
     const { projectId } = req.params;
+    console.log("Params:", req.params);
     const { version, isEdited = false, isFinal = false } = req.body;
     const uploaderId = req.user?.id;
 
@@ -153,10 +154,7 @@ const uploadFile = AsyncHandler(async (req: Request, res: Response) => {
 
     // Verify project exists and user has access
     const project = await prisma.project.findFirst({
-      where: {
-        id: projectId,
-        OR: [{ youtuberId: uploaderId }, { editorId: uploaderId }],
-      },
+      where: { projectDisplayId: projectId },
     });
 
     if (!project) {
@@ -201,7 +199,7 @@ const uploadFile = AsyncHandler(async (req: Request, res: Response) => {
 
       const savedFile = await prisma.file.create({
         data: {
-          projectId,
+          projectId: project.id,
           uploaderId,
           fileType,
           fileUrl,
@@ -229,9 +227,16 @@ const uploadFile = AsyncHandler(async (req: Request, res: Response) => {
         },
       });
 
+      const sanitizedFile = {
+        ...savedFile,
+        fileSize: savedFile.fileSize.toString(),
+      };
+
       return res
         .status(201)
-        .json(new ApiResponse(201, savedFile, "File uploaded successfully"));
+        .json(
+          new ApiResponse(201, sanitizedFile, "File uploaded successfully")
+        );
     } catch (error) {
       console.error("File upload error: ", error);
       throw new ApiError(500, "Failed to upload file");
