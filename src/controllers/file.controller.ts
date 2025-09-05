@@ -382,7 +382,48 @@ const generateFileSignedUrl = AsyncHandler(
     if (!userId) {
       throw new ApiError(401, "User not authenticaed");
     }
+
+    const file = await prisma.file.findFirst({
+      where: {
+        id: fileId,
+        project: {
+          OR: [{ youtuberId: userId }, { editorId: userId }],
+        },
+      },
+    });
+
+    if (!file) {
+      throw new ApiError(404, "File not found or access denied");
+    }
+
+    try {
+      const key = file.fileUrl.replace(
+        `${process.env.CLOUDFLARE_R2_PUBLIC_URL}/`,
+        ""
+      );
+      const command = new GetObjectCommand({
+        Bucket: BUCKET_NAME,
+        Key: key,
+      });
+
+      const signedUrl = await getSignedUrl(r2Client, command, {
+        expiresIn: Number(expiresIn),
+      });
+
+      return res
+        .status(200)
+        .json(
+          new ApiResponse(
+            200,
+            { signedUrl, expiresIn: Number(expiresIn) },
+            "Signed URL generated successfully"
+          )
+        );
+    } catch (error) {
+      console.error("Error generating signed URL:", error);
+      throw new ApiError(500, "Failed to generate signed URL");
+    }
   }
 );
 
-export { uploadFile, getProjectFiles, getFileById };
+export { uploadFile, getProjectFiles, getFileById, generateFileSignedUrl };
