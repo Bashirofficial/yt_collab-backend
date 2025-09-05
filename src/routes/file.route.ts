@@ -4,6 +4,7 @@ import {
   getProjectFiles,
   getFileById,
   generateFileSignedUrl,
+  updateFileStatus,
 } from "../controllers/file.controller";
 import { authenticate } from "../middlewares/auth.middleware";
 
@@ -13,5 +14,6 @@ router.route("/upload-files").post(authenticate, uploadFile);
 router.route("/get-project").get(authenticate, getProjectFiles);
 router.route("/get-file").get(authenticate, getFileById);
 router.route("/get-file-url").get(authenticate, generateFileSignedUrl);
+router.route("/update-file-status").post(authenticate, updateFileStatus);
 
 export default router;
