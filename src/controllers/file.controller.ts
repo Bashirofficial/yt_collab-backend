@@ -14,7 +14,7 @@ import { AsyncHandler } from "../utils/AsyncHandler";
 import { v4 as uuidv4 } from "uuid";
 import path from "path";
 import ffmpeg from "fluent-ffmpeg";
-import fs from "fs";
+import fs, { stat } from "fs";
 import { upload } from "../middlewares/multer.middleware";
 import multer from "multer";
 
@@ -143,7 +143,7 @@ const uploadFile = AsyncHandler(async (req: Request, res: Response) => {
       throw new ApiError(400, "No file uploaded");
     }
 
-    const { projectId } = req.params;
+    const { id: projectId } = req.params;
     console.log("Params:", req.params);
     const { version, isEdited = false, isFinal = false } = req.body;
     const uploaderId = req.user?.id;
@@ -246,7 +246,7 @@ const uploadFile = AsyncHandler(async (req: Request, res: Response) => {
 
 // C2. Get files for a project
 const getProjectFiles = AsyncHandler(async (req: Request, res: Response) => {
-  const { projectId } = req.params;
+  const { id: projectId } = req.params;
   const { fileType, status, page = 1, limit = 20 } = req.query;
   const userId = req.user?.id;
   if (!userId) {
@@ -328,7 +328,7 @@ const getProjectFiles = AsyncHandler(async (req: Request, res: Response) => {
 
 // C3. Get single file details
 const getFileById = AsyncHandler(async (req: Request, res: Response) => {
-  const { fileId } = req.params;
+  const { id: fileId } = req.params;
   const userId = req.user?.id;
   if (!userId) {
     throw new ApiError(401, "User not authenticaed");
@@ -376,7 +376,7 @@ const getFileById = AsyncHandler(async (req: Request, res: Response) => {
 // C4. Generate signed URL for file access
 const generateFileSignedUrl = AsyncHandler(
   async (req: Request, res: Response) => {
-    const { fileId } = req.params;
+    const { id: fileId } = req.params;
     const { expiresIn = 3600 } = req.query;
     const userId = req.user?.id;
     if (!userId) {
@@ -426,4 +426,75 @@ const generateFileSignedUrl = AsyncHandler(
   }
 );
 
-export { uploadFile, getProjectFiles, getFileById, generateFileSignedUrl };
+// C5. Update file status
+const updateFileStatus = AsyncHandler(async (req: Request, res: Response) => {
+  const { id: fileId } = req.params;
+  console.log("Params:", req.params);
+
+  const { status } = req.body;
+
+  const userId = req.user?.id;
+  if (!userId) {
+    throw new ApiError(401, "User not authenticated");
+  }
+
+  if (
+    !status ||
+    ![
+      "UPLOADED",
+      "PROCESSING",
+      "REVIEW",
+      "APPROVED",
+      "REJECTED",
+      "UPLOAD_FAILED",
+    ].includes(status)
+  ) {
+    throw new ApiError(400, "Invalid status provided");
+  }
+
+  const file = await prisma.file.findFirst({
+    where: {
+      id: fileId,
+      project: {
+        OR: [{ youtuberId: userId }, { editorId: userId }],
+      },
+    },
+  });
+
+  if (!file) {
+    throw new ApiError(404, "File not found or access denied");
+  }
+
+  const updatedFile = await prisma.file.update({
+    where: { id: fileId },
+    data: { status },
+    include: {
+      uploader: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      },
+    },
+  });
+
+  const serializedFile = {
+    ...updatedFile,
+    fileSize: updatedFile.fileSize.toString(),
+  };
+
+  return res
+    .status(200)
+    .json(
+      new ApiResponse(200, serializedFile, "File status updated successfully")
+    );
+});
+
+export {
+  uploadFile,
+  getProjectFiles,
+  getFileById,
+  generateFileSignedUrl,
+  updateFileStatus,
+};
