@@ -227,14 +227,16 @@ const uploadFile = AsyncHandler(async (req: Request, res: Response) => {
         },
       });
 
-      /*  const sanitizedFile = {
+      const sanitizedFile = {
         ...savedFile,
         fileSize: savedFile.fileSize.toString(),
-      };*/
+      };
 
       return res
         .status(201)
-        .json(new ApiResponse(201, savedFile, "File uploaded successfully"));
+        .json(
+          new ApiResponse(201, sanitizedFile, "File uploaded successfully")
+        );
     } catch (error) {
       console.error("File upload error: ", error);
       throw new ApiError(500, "Failed to upload file");
@@ -251,9 +253,16 @@ const getProjectFiles = AsyncHandler(async (req: Request, res: Response) => {
     throw new ApiError(401, "User not authenticated");
   }
 
+  const debugProject = await prisma.project.findFirst({
+    where: { projectDisplayId: projectId },
+    select: { id: true, youtuberId: true, editorId: true },
+  });
+  console.log(debugProject);
+
   const project = await prisma.project.findFirst({
     where: {
       projectDisplayId: projectId,
+      //OR: [{ youtuberId: userId }, { editorId: userId }],
     },
   });
 
@@ -317,4 +326,63 @@ const getProjectFiles = AsyncHandler(async (req: Request, res: Response) => {
   );
 });
 
-export { uploadFile, getProjectFiles };
+// C3. Get single file details
+const getFileById = AsyncHandler(async (req: Request, res: Response) => {
+  const { fileId } = req.params;
+  const userId = req.user?.id;
+  if (!userId) {
+    throw new ApiError(401, "User not authenticaed");
+  }
+
+  const file = await prisma.file.findFirst({
+    where: {
+      id: fileId,
+      project: {
+        OR: [{ youtuberId: userId }, { editorId: userId }],
+      },
+    },
+    include: {
+      uploader: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      },
+      project: {
+        select: {
+          id: true,
+          title: true,
+          videoTitle: true,
+        },
+      },
+    },
+  });
+
+  if (!file) {
+    throw new ApiError(404, "File not found or access denied");
+  }
+
+  const serializedFile = {
+    ...file,
+    fileSize: file.fileSize.toString(),
+  };
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, serializedFile, "File retrieved successfully"));
+});
+
+// C4. Generate signed URL for file access
+const generateFileSignedUrl = AsyncHandler(
+  async (req: Request, res: Response) => {
+    const { fileId } = req.params;
+    const { expiresIn = 3600 } = req.query;
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new ApiError(401, "User not authenticaed");
+    }
+  }
+);
+
+export { uploadFile, getProjectFiles, getFileById };
