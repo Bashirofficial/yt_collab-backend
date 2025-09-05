@@ -45,7 +45,7 @@ import fileRouter from "./routes/file.route";
 app.use("/api/v1/users", userRouter);
 app.use("/api/v1/users", googlAuthRouter);
 app.use("/api/v1/projects", projectRouter);
-app.use("/api/v1/projects/:projectId/files", fileRouter);
+app.use("/api/v1/projects/:id/files", fileRouter);
 app.use(errorHandler);
 
 export { app };
