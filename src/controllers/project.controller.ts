@@ -5,6 +5,9 @@ import { ApiResponse } from "../utils/ApiResponse";
 import { AsyncHandler } from "../utils/AsyncHandler";
 import generateProjectCode from "../utils/generateProjectCode";
 
+//--------- Controllers (C) ---------//
+
+// C1. Create a new project
 const createProject = AsyncHandler(async (req: Request, res: Response) => {
   const {
     title,
@@ -81,6 +84,7 @@ const createProject = AsyncHandler(async (req: Request, res: Response) => {
     );
 });
 
+// C2. Get project details by project display id
 const getProject = AsyncHandler(async (req: Request, res: Response) => {
   const { projectDisplayId } = req.params;
 
@@ -131,6 +135,7 @@ const getProject = AsyncHandler(async (req: Request, res: Response) => {
     .json(new ApiResponse(200, project, "Project retrieved successfully"));
 });
 
+// C3. Edit an existing project
 const editProject = AsyncHandler(async (req: Request, res: Response) => {
   const { projectDisplayId } = req.params;
   const {
