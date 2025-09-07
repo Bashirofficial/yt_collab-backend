@@ -491,10 +491,70 @@ const updateFileStatus = AsyncHandler(async (req: Request, res: Response) => {
     );
 });
 
+// C6. Delete file
+const deleteFile = AsyncHandler(async (req: Request, res: Response) => {
+  const { id: fileId } = req.params;
+  const userId = req.user?.id;
+  if (!userId) {
+    throw new ApiError(401, "User not authenticated");
+  }
+
+  const file = await prisma.file.findFirst({
+    where: {
+      id: fileId,
+      project: {
+        OR: [{ youtuberId: userId }, { editorId: userId }],
+      },
+    },
+  });
+
+  if (!file) {
+    throw new ApiError(404, "File not found or access denied");
+  }
+
+  try {
+    const key = file.fileUrl.replace(
+      `${process.env.CLOUDFLARE_R2_PUBLIC_URL}/`,
+      ""
+    );
+    await r2Client.send(
+      new DeleteObjectCommand({
+        Bucket: BUCKET_NAME,
+        Key: key,
+      })
+    );
+
+    if (file.thumbnailUrl) {
+      const thumbnailKey = file.thumbnailUrl.replace(
+        `${process.env.CLOUDFLARE_R2_PUBLIC_URL}/`,
+        ""
+      );
+      await r2Client.send(
+        new DeleteObjectCommand({
+          Bucket: BUCKET_NAME,
+          Key: thumbnailKey,
+        })
+      );
+    }
+
+    await prisma.file.delete({
+      where: { id: fileId },
+    });
+
+    return res
+      .status(200)
+      .json(new ApiResponse(200, null, "File deleted successfully"));
+  } catch (error) {
+    console.error("Error occured while deleting file", error);
+    throw new ApiError(500, "Failed to delete file");
+  }
+});
+
 export {
   uploadFile,
   getProjectFiles,
   getFileById,
   generateFileSignedUrl,
   updateFileStatus,
+  deleteFile,
 };
