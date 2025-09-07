@@ -7,6 +7,9 @@ import { ApiResponse } from "../utils/ApiResponse";
 import { AsyncHandler } from "../utils/AsyncHandler";
 import { generateAccessAndRefreshToken } from "../services/auth.service";
 
+//--------- Controllers (C) ---------//
+
+// C1. Refresh access token endpoint
 const refreshAccessToken = AsyncHandler(async (req, res) => {
   const incomingRefreshToken =
     req.cookies.refreshToken || req.body.refreshToken;
@@ -58,6 +61,7 @@ const refreshAccessToken = AsyncHandler(async (req, res) => {
   }
 });
 
+// C2. Register as an Editor
 const register = AsyncHandler(async (req: Request, res: Response) => {
   const { name, email, password, role } = req.body;
 
@@ -88,6 +92,7 @@ const register = AsyncHandler(async (req: Request, res: Response) => {
     .json(new ApiResponse(201, createdUser, "User registered Successfully"));
 });
 
+// C3. Login as an Editor
 const login = AsyncHandler(async (req: Request, res: Response) => {
   const { email, password } = req.body;
   if (!email || !password) {
@@ -134,6 +139,7 @@ const login = AsyncHandler(async (req: Request, res: Response) => {
     );
 });
 
+// C4. Logout as an Editor
 const logout = AsyncHandler(async (req: Request, res: Response) => {
   if (!req.user) {
     throw new ApiError(401, "Unauthorized: User not authenticated.");
