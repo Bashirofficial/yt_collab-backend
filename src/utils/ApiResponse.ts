@@ -1,3 +1,4 @@
+import { serializeBigInt } from "./serialization.util";
 class ApiResponse<T = any> {
   public statusCode: number;
   public data: T;
@@ -6,7 +7,7 @@ class ApiResponse<T = any> {
 
   constructor(statusCode: number, data: T, message = "Success") {
     this.statusCode = statusCode;
-    this.data = data;
+    this.data = serializeBigInt(data);
     this.message = message;
     this.success = statusCode < 400;
   }
