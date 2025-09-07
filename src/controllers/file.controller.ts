@@ -14,7 +14,7 @@ import { AsyncHandler } from "../utils/AsyncHandler";
 import { v4 as uuidv4 } from "uuid";
 import path from "path";
 import ffmpeg from "fluent-ffmpeg";
-import fs, { stat } from "fs";
+import fs from "fs";
 import { upload } from "../middlewares/multer.middleware";
 import multer from "multer";
 
@@ -303,16 +303,11 @@ const getProjectFiles = AsyncHandler(async (req: Request, res: Response) => {
 
   const totalPages = Math.ceil(totalCount / Number(limit));
 
-  const serializedFiles = files.map((file) => ({
-    ...file,
-    fileSize: file.fileSize.toString(),
-  }));
-
   return res.status(200).json(
     new ApiResponse(
       200,
       {
-        serializedFiles,
+        files,
         pagination: {
           currentPage: Number(page),
           totalPages,
@@ -363,14 +358,9 @@ const getFileById = AsyncHandler(async (req: Request, res: Response) => {
     throw new ApiError(404, "File not found or access denied");
   }
 
-  const serializedFile = {
-    ...file,
-    fileSize: file.fileSize.toString(),
-  };
-
   return res
     .status(200)
-    .json(new ApiResponse(200, serializedFile, "File retrieved successfully"));
+    .json(new ApiResponse(200, file, "File retrieved successfully"));
 });
 
 // C4. Generate signed URL for file access
@@ -479,15 +469,10 @@ const updateFileStatus = AsyncHandler(async (req: Request, res: Response) => {
     },
   });
 
-  const serializedFile = {
-    ...updatedFile,
-    fileSize: updatedFile.fileSize.toString(),
-  };
-
   return res
     .status(200)
     .json(
-      new ApiResponse(200, serializedFile, "File status updated successfully")
+      new ApiResponse(200, updatedFile, "File status updated successfully")
     );
 });
 
