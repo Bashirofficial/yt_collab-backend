@@ -243,7 +243,36 @@ export const initializeMessageSocket = (httpServer: HTTPServer) => {
           console.error("Send message error:", error);
           socket.emit("error", { message: "Failed to send message" });
         }
-      }
-    );
+    });
+    
+    // Typing indicators
+    socket.on("typing-start", async(data: { projectId: string }) => {
+      const {projectId} = data;
+      const roomName = `project:${project.id}` const roomName = `project:${projectId}`;
+      if (!socket.projectRooms?.has(roomName)) return; 
+
+      socket.to(roomName).emit('user-typing', {
+        user: {
+          id: socket.userId!,
+          name: socket.user!.name
+        },
+        isTyping: true
+      })
+    })
+
+    //
+    socket.on("typing-stop", async(data: { projectId: string }) => {
+      const {projectId} = data;
+      const roomName = `project:${project.id}` const roomName = `project:${projectId}`;
+      if (!socket.projectRooms?.has(roomName)) return; 
+
+      socket.to(roomName).emit('user-typing', {
+        user: {
+          id: socket.userId!,
+          name: socket.user!.name
+        },
+        isTyping: false
+      })
+    })
   });
 };
