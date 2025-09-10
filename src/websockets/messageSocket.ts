@@ -2,6 +2,7 @@ import { Server as SocketIOServer, Socket } from "socket.io";
 import { Server as HTTPServer } from "http";
 import jwt from "jsonwebtoken";
 import prisma from "../db";
+import { error } from "console";
 
 interface AuthenticatedSocket extends Socket {
   userId?: string;
@@ -274,5 +275,78 @@ export const initializeMessageSocket = (httpServer: HTTPServer) => {
         isTyping: false
       })
     })
+
+    // Mark message as seen
+    socket.on("mark-as-read", async(data: { projectId: string; messageIds?: string[] }) => {
+      try {
+        const { projectId,  messageIds} = data;
+      const project = await prisma.project.findFirst({
+        where: {
+          projectDisplayId: projectId
+        }
+      })
+
+      if (!project) return;
+      
+      const whereClause: any = {
+        projectId: project.id,
+        senderId: { not: socket.userId },
+        isRead: false
+      };
+
+      if (messageIds && messageIds.length > 0) {
+        whereClause.id = { in: messageIds}
+      }
+
+      await prisma.message.updateMany({
+        where: whereClause,
+        data: { isRead: true }
+      })
+
+      socket.to(`project:${project.id}`).emit('messages-read', {
+        readBy: {
+          id: socket.userId!,
+          name: socket.user!.name
+        },
+        messageIds: messageIds || 'all',
+        timestamp: new Date()
+      } catch (error) {
+        console.error("Mark as read error: ", error)
+      }  
+    })
+
+    // Handle disconnection 
+    socket.on('disconnect', () => {
+      console.log(`User ${socket.userId} disconnected from messaging`)
+
+      if (socket.projectRooms) {
+        socket.projectRooms.forEach(roomName => {
+          const projectId = roomName.replace('project:', '');
+          const projectUserMap = projectUsers.get(projectId)
+
+          if(projectUserMap) {
+            projectUserMap.delete(socket.userId!)
+            
+            socket.to(roomName).emit('user-left', {
+              user: {
+                id: socket.userId,
+                name: socket.user?.name
+              },
+              timestamp: new Data()
+            })
+          }
+        })
+      }
+    })
+
+    // Handle errors
+    socket.on('error',(error) => {
+      console.error('Socket error:', error)
+    })
   });
+
+  return io;
 };
+
+// Helper function to send system messages
+
