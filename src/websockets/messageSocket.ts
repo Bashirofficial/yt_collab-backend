@@ -82,6 +82,7 @@ export const initializeMessageSocket = (httpServer: HTTPServer) => {
   io.on("connection", (socket: AuthenticatedSocket) => {
     console.log(`User ${socket.userId} connected to messaging`);
 
+    // Join project room
     socket.on("join-project", async (data: { projectId: string }) => {
       try {
         const { projectId } = data;
@@ -119,8 +120,8 @@ export const initializeMessageSocket = (httpServer: HTTPServer) => {
         socket.to(roomName).emit("user-joined", {
           user: {
             id: socket.userId!,
-            name: socket.user.name,
-            email: socket.user.email,
+            name: socket.user!.name,
+            email: socket.user!.email,
           },
           timeStamp: new Date(),
         });
@@ -136,5 +137,113 @@ export const initializeMessageSocket = (httpServer: HTTPServer) => {
         socket.emit("error", { message: "Failed to join project" });
       }
     });
+
+    // Leave project room
+    socket.on("leave-project", async (data: { projectId: string }) => {
+      try {
+        const { projectId } = data;
+
+        const project = await prisma.project.findFirst({
+          where: {
+            projectDisplayId: projectId,
+            OR: [{ youtuberId: socket.userId }, { editorId: socket.userId }],
+          },
+        });
+
+        const roomName = `project:${project.id}`;
+
+        socket.leave(roomName);
+        socket.projectRooms?.delete(roomName);
+
+        // Remove user from project users map
+        const projectUserMap = projectUsers.get(project.id);
+
+        if (projectUserMap) {
+          projectUserMap.delete(socket.userId!);
+
+          // Notify other user
+          socket.to(roomName).emit("user-left", {
+            user: {
+              id: socket.userId,
+              name: socket.user!.name,
+            },
+            timestamp: new Date(),
+          });
+        }
+
+        socket.emit("left-project", { projectId: project?.projectDisplayId });
+      } catch (error) {
+        console.error("Leave project error occured: ", error);
+      }
+    });
+
+    // Send message
+    socket.on(
+      "send-message",
+      async (data: {
+        projectId: string;
+        content: string;
+        messageType?: "TEXT" | "FILE" | "SYSTEM" | "NOTIFICATION";
+        fileUrl?: string;
+        fileName?: string;
+      }) => {
+        try {
+          const {
+            projectId,
+            content,
+            messageType = "TEXT",
+            fileUrl,
+            fileName,
+          } = data;
+
+          // Verify project access
+          const project = await prisma.project.findFirst({
+            where: {
+              projectDisplayId: projectId,
+              OR: [{ youtuberId: socket.userId }, { editorId: socket.userId }],
+            },
+          });
+
+          if (!project) {
+            socket.emit("error", { message: "Access denied to project" });
+            return;
+          }
+
+          // Create message in database
+          const message = await prisma.message.create({
+            data: {
+              projectId: project.id,
+              senderId: socket.userId!,
+              content: content.trim(),
+              messageType,
+              metadata: messageType === "FILE" ? { fileUrl, fileName } : {},
+            },
+            include: {
+              sender: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                  avatar: true,
+                },
+              },
+            },
+          });
+
+          const roomName = `project:${project.id}`;
+
+          // Broadcast to all users in project
+          io.to(roomName).emit("new-message", {
+            message: message,
+            timestamp: new Date(),
+          });
+
+          socket.emit("message-sent", { messageId: message.id });
+        } catch (error) {
+          console.error("Send message error:", error);
+          socket.emit("error", { message: "Failed to send message" });
+        }
+      }
+    );
   });
 };
