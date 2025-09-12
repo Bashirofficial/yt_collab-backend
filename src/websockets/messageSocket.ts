@@ -2,7 +2,6 @@ import { Server as SocketIOServer, Socket } from "socket.io";
 import { Server as HTTPServer } from "http";
 import jwt from "jsonwebtoken";
 import prisma from "../db";
-import { error } from "console";
 
 interface AuthenticatedSocket extends Socket {
   userId?: string;
@@ -16,7 +15,7 @@ interface AuthenticatedSocket extends Socket {
 
 interface SocketUser {
   id: string;
-  name: string;
+  name: string | null;
   email: string;
   socketId: string;
 }
@@ -109,11 +108,11 @@ export const initializeMessageSocket = (httpServer: HTTPServer) => {
           projectUsers.set(project.id, new Map());
         }
 
-        const projectUserMap = projectUsers.get(projectId)!;
+        const projectUserMap = projectUsers.get(project.id)!;
         projectUserMap.set(socket.userId!, {
           id: socket.userId!,
-          name: socket.user.name,
-          email: socket.user.email,
+          name: socket.user!.name ?? "Anonymous",
+          email: socket.user!.email,
           socketId: socket.id,
         });
 
@@ -121,7 +120,7 @@ export const initializeMessageSocket = (httpServer: HTTPServer) => {
         socket.to(roomName).emit("user-joined", {
           user: {
             id: socket.userId!,
-            name: socket.user!.name,
+            name: socket.user!.name ?? "Anonymous",
             email: socket.user!.email,
           },
           timeStamp: new Date(),
@@ -151,6 +150,11 @@ export const initializeMessageSocket = (httpServer: HTTPServer) => {
           },
         });
 
+        if (!project) {
+          socket.emit("error", { message: "Access denied to project" });
+          return;
+        }
+
         const roomName = `project:${project.id}`;
 
         socket.leave(roomName);
@@ -166,7 +170,7 @@ export const initializeMessageSocket = (httpServer: HTTPServer) => {
           socket.to(roomName).emit("user-left", {
             user: {
               id: socket.userId,
-              name: socket.user!.name,
+              name: socket.user!.name ?? "Anonymous",
             },
             timestamp: new Date(),
           });
@@ -244,109 +248,137 @@ export const initializeMessageSocket = (httpServer: HTTPServer) => {
           console.error("Send message error:", error);
           socket.emit("error", { message: "Failed to send message" });
         }
-    });
-    
+      }
+    );
+
     // Typing indicators
-    socket.on("typing-start", async(data: { projectId: string }) => {
-      const {projectId} = data;
-      const roomName = `project:${project.id}` const roomName = `project:${projectId}`;
-      if (!socket.projectRooms?.has(roomName)) return; 
-
-      socket.to(roomName).emit('user-typing', {
-        user: {
-          id: socket.userId!,
-          name: socket.user!.name
-        },
-        isTyping: true
-      })
-    })
-
-    //
-    socket.on("typing-stop", async(data: { projectId: string }) => {
-      const {projectId} = data;
-      const roomName = `project:${project.id}` const roomName = `project:${projectId}`;
-      if (!socket.projectRooms?.has(roomName)) return; 
-
-      socket.to(roomName).emit('user-typing', {
-        user: {
-          id: socket.userId!,
-          name: socket.user!.name
-        },
-        isTyping: false
-      })
-    })
-
-    // Mark message as seen
-    socket.on("mark-as-read", async(data: { projectId: string; messageIds?: string[] }) => {
-      try {
-        const { projectId,  messageIds} = data;
+    socket.on("typing-start", async (data: { projectId: string }) => {
+      const { projectId } = data;
       const project = await prisma.project.findFirst({
         where: {
-          projectDisplayId: projectId
-        }
-      })
+          projectDisplayId: projectId,
+          OR: [{ youtuberId: socket.userId }, { editorId: socket.userId }],
+        },
+      });
 
-      if (!project) return;
-      
-      const whereClause: any = {
-        projectId: project.id,
-        senderId: { not: socket.userId },
-        isRead: false
-      };
-
-      if (messageIds && messageIds.length > 0) {
-        whereClause.id = { in: messageIds}
+      if (!project) {
+        socket.emit("error", { message: "Access denied to project" });
+        return;
       }
 
-      await prisma.message.updateMany({
-        where: whereClause,
-        data: { isRead: true }
-      })
+      const roomName = `project:${project.id}`;
+      if (!socket.projectRooms?.has(roomName)) return;
 
-      socket.to(`project:${project.id}`).emit('messages-read', {
-        readBy: {
+      socket.to(roomName).emit("user-typing", {
+        user: {
           id: socket.userId!,
-          name: socket.user!.name
+          name: socket.user!.name ?? "Anonymous",
         },
-        messageIds: messageIds || 'all',
-        timestamp: new Date()
-      } catch (error) {
-        console.error("Mark as read error: ", error)
-      }  
-    })
+        isTyping: true,
+      });
+    });
 
-    // Handle disconnection 
-    socket.on('disconnect', () => {
-      console.log(`User ${socket.userId} disconnected from messaging`)
+    //
+    socket.on("typing-stop", async (data: { projectId: string }) => {
+      const { projectId } = data;
+      const project = await prisma.project.findFirst({
+        where: {
+          projectDisplayId: projectId,
+          OR: [{ youtuberId: socket.userId }, { editorId: socket.userId }],
+        },
+      });
+
+      if (!project) {
+        socket.emit("error", { message: "Access denied to project" });
+        return;
+      }
+
+      const roomName = `project:${project.id}`;
+      if (!socket.projectRooms?.has(roomName)) return;
+
+      socket.to(roomName).emit("user-typing", {
+        user: {
+          id: socket.userId!,
+          name: socket.user!.name ?? "Anonymous",
+        },
+        isTyping: false,
+      });
+    });
+
+    // Mark message as seen
+    socket.on(
+      "mark-as-read",
+      async (data: { projectId: string; messageIds?: string[] }) => {
+        try {
+          const { projectId, messageIds } = data;
+          const project = await prisma.project.findFirst({
+            where: {
+              projectDisplayId: projectId,
+            },
+          });
+
+          if (!project) return;
+
+          const whereClause: any = {
+            projectId: project.id,
+            senderId: { not: socket.userId },
+            isRead: false,
+          };
+
+          if (messageIds && messageIds.length > 0) {
+            whereClause.id = { in: messageIds };
+          }
+
+          await prisma.message.updateMany({
+            where: whereClause,
+            data: { isRead: true },
+          });
+
+          socket.to(`project:${project.id}`).emit("messages-read", {
+            readBy: {
+              id: socket.userId!,
+              name: socket.user!.name ?? "Anonymous",
+            },
+            messageIds: messageIds || "all",
+            timestamp: new Date(),
+          });
+        } catch (error) {
+          console.error("Mark as read error: ", error);
+        }
+      }
+    );
+
+    // Handle disconnection
+    socket.on("disconnect", () => {
+      console.log(`User ${socket.userId} disconnected from messaging`);
 
       if (socket.projectRooms) {
-        socket.projectRooms.forEach(roomName => {
-          const projectId = roomName.replace('project:', '');
-          const projectUserMap = projectUsers.get(projectId)
+        socket.projectRooms.forEach((roomName) => {
+          const dbProjectId = roomName.replace("project:", "");
+          const projectUserMap = projectUsers.get(dbProjectId);
 
-          if(projectUserMap) {
-            projectUserMap.delete(socket.userId!)
-            
-            socket.to(roomName).emit('user-left', {
+          if (projectUserMap) {
+            projectUserMap.delete(socket.userId!);
+
+            socket.to(roomName).emit("user-left", {
               user: {
                 id: socket.userId,
-                name: socket.user?.name
+                name: socket.user!.name ?? "Anonymous",
               },
-              timestamp: new Data()
-            })
+              timestamp: new Date(),
+            });
           }
-        })
+        });
       }
-    })
+    });
 
     // Handle errors
-    socket.on('error',(error) => {
-      console.error('Socket error:', error)
-    })
+    socket.on("error", (error) => {
+      console.error("Socket error:", error);
+    });
   });
 
   return io;
 };
 
 // Helper function to send system messages
-
