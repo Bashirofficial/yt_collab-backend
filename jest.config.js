@@ -10,4 +10,6 @@ module.exports = {
     ...tsJestTransformCfg,
   },
   testMatch: ["**/tests/**/*.test.ts"],
+  setupFilesAfterEnv: ["<rootDir>/tests/setup.ts"],
+  testTimeout: 10000, // Increased timeout for socket tests
 };
