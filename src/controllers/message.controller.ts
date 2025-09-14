@@ -23,7 +23,94 @@ interface MessageFilters {
 //--------- Controllers (C) ---------//
 
 // C1. Send a message to a project
-const sendMessage = AsyncHandler(async (req: Request, res: Response) => {});
+const sendMessage = AsyncHandler(async (req: Request, res: Response) => {
+  const { projectId } = req.params;
+  const {
+    content,
+    messageType = "TEXT",
+    fileUrl,
+    fileName,
+  }: CreateMessageRequest = req.body;
+  const senderId = req.user?.id;
+
+  if (!senderId) {
+    throw new ApiError(401, "User not authenticated");
+  }
+
+  if (!content && !fileUrl) {
+    throw new ApiError(400, "Message content is required");
+  }
+
+  if (content.length > 2000) {
+    throw new ApiError(400, "Message cannot exceed 2000 characters");
+  }
+
+  const project = await prisma.project.findFirst({
+    where: {
+      projectDisplayId: projectId,
+      OR: [{ youtuberId: senderId }, { editorId: senderId }],
+    },
+  });
+
+  if (!project) {
+    throw new ApiError(404, "Project not found or access denied");
+  }
+
+  if (messageType === "FILE") {
+    if (!fileUrl)
+      throw new ApiError(400, "File URL is required for file messages");
+    if (!fileName)
+      throw new ApiError(400, "File name is required for file messages");
+  }
+
+  try {
+    const message = await prisma.message.create({
+      data: {
+        projectId: project.id,
+        senderId,
+        content: content.trim() || "",
+        messageType,
+      },
+      include: {
+        sender: {
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            avatar: true,
+          },
+        },
+        project: {
+          select: {
+            id: true,
+            title: true,
+            projectDisplayId: true,
+          },
+        },
+      },
+    });
+
+    // System message for file uploads
+    if (messageType === "FILE") {
+      await prisma.message.create({
+        data: {
+          projectId,
+          senderId,
+          content: content || "",
+          messageType: "FILE",
+          metadata: { fileUrl, fileName },
+        },
+      });
+    }
+
+    return res
+      .status(201)
+      .json(new ApiResponse(201, message, "Message sent successfully"));
+  } catch (error) {
+    console.error("Send message error: ", error);
+    throw new ApiError(500, "Failed to send message");
+  }
+});
 
 // C2. Get messages for a project with pagination and filters
 const getProjectMessages = AsyncHandler(
