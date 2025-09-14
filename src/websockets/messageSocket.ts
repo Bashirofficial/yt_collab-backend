@@ -350,7 +350,10 @@ export const initializeMessageSocket = (httpServer: HTTPServer) => {
 
     // Handle disconnection
     socket.on("disconnect", () => {
-      console.log(`User ${socket.userId} disconnected from messaging`);
+      //console.log(`User ${socket.userId} disconnected from messaging`);
+      if (process.env.NODE_ENV !== "test") {
+        console.log(`User ${socket.userId} disconnected from messaging`);
+      }
 
       if (socket.projectRooms) {
         socket.projectRooms.forEach((roomName) => {
