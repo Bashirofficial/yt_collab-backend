@@ -9,7 +9,8 @@
     "build": "rimraf build && tsc",
     "lint": "eslint . --ext .ts",
     "check-types": "tsc --noEmit",
-    "test": "jest"
+    "test": "jest",
+    "test:sockets": "jest tests/sockets"
   },
   "author": "Bashir",
   "license": "ISC",
@@ -22,6 +23,7 @@
     "body-parser": "^2.2.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
+    "dotenv": "^17.2.2",
     "express": "^5.1.0",
     "express-rate-limit": "^8.1.0",
     "express-session": "^1.18.2",
