@@ -129,7 +129,7 @@ model Message {
   messageType MessageType @default(TEXT) // TEXT, FILE, SYSTEM
   isRead    Boolean  @default(false)
   createdAt DateTime @default(now())
-  
+  metadata  Json? 
   project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   sender    User     @relation("SentMessages", fields: [senderId], references: [id])
   checklistItem   ChecklistItem[]

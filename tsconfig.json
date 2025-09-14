@@ -15,13 +15,14 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "typeRoots": ["./src/types", "./node_modules/@types"],
-    "types": ["node", "express"]
+    "types": ["node", "express", "jest"]
   },
   "include": [
     "src/**/*",
     "src/types/**/*",
     "src/**/*.d.ts",
-    "src/types/*.d.ts"
+    "src/types/*.d.ts",
+    "tests/**/*"
   ],
   "exclude": ["build", "node_modules", ".templates"]
 }
