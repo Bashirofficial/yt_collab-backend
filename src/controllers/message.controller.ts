@@ -22,7 +22,7 @@ interface MessageFilters {
 
 //--------- Controllers (C) ---------//
 
-// C1. Send a message to a project
+// C1. Send a message to project room
 const sendMessage = AsyncHandler(async (req: Request, res: Response) => {
   const { projectId } = req.params;
   const {
