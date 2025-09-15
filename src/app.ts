@@ -41,11 +41,13 @@ import userRouter from "./routes/user.route";
 import projectRouter from "./routes/project.route";
 import googlAuthRouter from "./routes/googleAuth.route";
 import fileRouter from "./routes/file.route";
+import messageRouter from "./routes/message.route";
 
 app.use("/api/v1/users", userRouter);
 app.use("/api/v1/users", googlAuthRouter);
 app.use("/api/v1/projects", projectRouter);
 app.use("/api/v1/projects/:id/files", fileRouter);
+app.use("/api/v1/users", messageRouter);
 app.use(errorHandler);
 
 export { app };
