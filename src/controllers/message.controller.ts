@@ -314,13 +314,157 @@ const getMessageById = AsyncHandler(async (req: Request, res: Response) => {
 });
 
 // C5. Delete message (soft delete by setting content to "[deleted]")
-const deleteMessage = AsyncHandler(async (req: Request, res: Response) => {});
+const deleteMessage = AsyncHandler(async (req: Request, res: Response) => {
+
+  const { messageId } = req.params;
+  const userId = req.user?.id;
+
+  if (!userId) {
+    throw new ApiError(401, "User not authenticated");
+  }
+
+  const message = await prisma.message.findFirst({
+    where: {
+      id: messageId,
+      senderId: userId,
+      project: {
+        OR: [
+          { youtuberId: userId },
+          { editorId: userId }
+        ]
+      }
+    }
+  })
+
+  if(!message) {
+    throw new ApiError(404, "Message not found or you don't have permission to delete it")
+  }
+
+  const twentyFourHoursAgo  = newDate(Date.now() - 24 * 60 * 60 * 1000);
+  if (message.createdAt < twentyFourHoursAgo) {
+    throw new ApiError(403, "Cannot delete messages older than 24 hours")
+  } 
+
+  try {
+   const updatedMessage = await prisma.message.update({
+    where: { id: messageId }, 
+    data: {
+      content: "[This message was deleted]",
+      messageType: 'SYSTEM',
+      metadata: { ...message.metadata, deleted: true, deletedAt: new Date()}
+    },
+    include: {
+      sender: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          avatar: true
+        }
+      }
+    }
+   }) 
+
+   return res
+    .status(200)
+    .json(new ApiResponse(200, updatedMessage, "Message deleted succefully"))
+  } catch (error) {
+    console.error("Delete message error: ", error)
+    throw new ApiError("Failed to delete message")
+  }
+});
 
 // C6. Get message statistics for a project
 const getMessageStats = AsyncHandler(async (req: Request, res: Response) => {});
 
 // C7. Search messages in a project
-const searchMessages = AsyncHandler(async (req: Request, res: Response) => {});
+const searchMessages = AsyncHandler(async (req: Request, res: Response) => {
+  const { projectId } = req.params;
+  const { query, page = 1, limit = 20 } = req.query as any;
+  const userId = req.user?.id;
+
+  if (!userId) {
+    throw new ApiError(401, "User not authenticated");
+  }
+
+  if (!query || query.trim().length < 2) {
+    throw new ApiError(400, "Search query must be at least 2 characters long");
+  }
+
+  const project = await prisma.project.findFirst({
+    where: {
+      projectDisplayId: projectId,
+      OR: [
+        { youtuberId: userId },
+        { editorId: userId }
+      ]
+    }
+  })
+
+  if (!project) {
+    throw new ApiError(404, "Project not found or access denied");
+  }
+
+  const skip = (Number(page) - 1) * Number(limit);
+  const take = Math.min(Number(limit), 50)
+
+  try {
+    const [messages, totalCount] = await Promise.all([
+      prisma.message.findMany({
+        where: {
+          projectId: project.id,
+          content: {
+            contains: query.trim(),
+            mode:  "insensitive"
+          }
+        },
+        include: {
+          sender: {
+            select: {
+              id: true,
+              email: true,
+              name: true,
+              avatar: true
+            }
+          }
+        },
+
+        orderBy: { createdAt: 'desc'},
+        skip,
+        take
+      }),
+      prisma.message.count({
+        where: {
+          projectId: project.id,
+          content: {
+            contains: query.trim(),
+            mode: 'insensitive'
+          }
+        }
+      })
+    ])
+
+    const totalPages = Math.ceil(totalCount / take)
+     
+    return res
+      .status(200)
+      .json(new ApiResponse(200, {
+        messages: messages,
+        searchQuery: query.trim(),
+        pagination: {
+          currentPage: Number(page),
+          totalPages,
+          totalCount,
+          hasNextPage: Number(page) < totalPages,
+          hasPrevPage: Number(page) > 1 
+        }
+      }, "Search completed successfully"))
+  } catch (error) {
+    console.error("Search message error: ",
+    throw new ApiError(500, "Failed to search messages")
+    )
+  }
+});
 
 export {
   sendMessage,
