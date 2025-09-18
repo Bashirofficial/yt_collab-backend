@@ -143,11 +143,11 @@ const getProjectMessages = AsyncHandler(async (req: Request, res: Response) => {
   const whereClause: any = { projectId: project.id };
 
   if (messageType && typeof messageType === "string") {
-    whereClause.messageType = messageType.toUpperCase()
+    whereClause.messageType = messageType.toUpperCase();
   }
 
   if (isRead !== undefined) {
-    whereClause.isRead = isRead === 'true'
+    whereClause.isRead = isRead === "true";
   }
 
   if (senderId && typeof senderId === "string") {
@@ -155,16 +155,16 @@ const getProjectMessages = AsyncHandler(async (req: Request, res: Response) => {
   }
 
   if (fromDate || toDate) {
-    whereClause.createAt = {};
+    whereClause.createdAt = {};
     if (fromDate) {
-      whereClause.createAt.gte = new Date(fromDate a string)
+      whereClause.createdAt.gte = new Date(fromDate as string);
     }
     if (toDate) {
-      whereClause.createAt.lte = new Date(toDate as string)
+      whereClause.createdAt.lte = new Date(toDate as string);
     }
   }
 
-  const skip = (Number(page) - 1) *  Number(limit);
+  const skip = (Number(page) - 1) * Number(limit);
   const take = Math.min(Number(limit), 100); //Max 100 messages per request
 
   try {
@@ -177,94 +177,111 @@ const getProjectMessages = AsyncHandler(async (req: Request, res: Response) => {
               id: true,
               email: true,
               name: true,
-              avatar: true
-            }
-          }
+              avatar: true,
+            },
+          },
         },
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: "desc" },
         skip,
-        take
+        take,
       }),
       prisma.message.count({ where: whereClause }),
       prisma.message.count({
         where: {
           ...whereClause,
           isRead: false,
-          senderId: { not: userId } //Own message cant be unread.
-        }
-      })
-    ])
+          senderId: { not: userId }, //Own message cant be unread.
+        },
+      }),
+    ]);
 
     const totalPages = Math.ceil(totalCount / take);
-    
-    return res 
-      .status(200)
-      .json(new ApiResponse(200, {
-        messages,
-        pagination: {
-          currentPage: Number(page),
-          totalPages,
-          totalCount, 
-          unreadCount,
-          hasNextPage: Number(page) < totalPages,
-          hasPrevPage: Number(page) > 
-        }
-      }, "Message retrieved successfully"))
+
+    return res.status(200).json(
+      new ApiResponse(
+        200,
+        {
+          messages,
+          pagination: {
+            currentPage: Number(page),
+            totalPages,
+            totalCount,
+            unreadCount,
+            hasNextPage: Number(page) < totalPages,
+            hasPrevPage: Number(page) > 1,
+          },
+        },
+        "Message retrieved successfully"
+      )
+    );
   } catch (error) {
     console.error("Get messages error: ", error);
-    throw new ApiError(500, "Failed to retireve messages")
+    throw new ApiError(500, "Failed to retireve messages");
   }
 });
 
 // C3. Mark message as read
 const markMessagesAsRead = AsyncHandler(async (req: Request, res: Response) => {
-    
   const { projectId } = req.params;
-    const { messageIds } = req.body:
-    const userId = req.user?.id;
+  let { messageIds } = req.body;
+  const userId = req.user?.id;
 
-    if (!userId) {
-      throw new ApiError(401, "User not authenticated")
-    }
-    const project = await prisma.project.findFirst({
-      where: {
-        projectDisplayId: projectId,
-        OR: [
-          { youtuberId: userId },
-          { editorId: userId }
-        ]
-      }
-    })
-
-    if (!project) {
-      throw new ApiError(404, "Project not found or access denied")
-    }
-    
-    try {
-      const whereClause: any = {
-        projectId: project.id,
-        senderId: { not userId },
-        isRead: false
-      }
-
-      if (messageIds && Array.isArray(messageIds) && messageIds.length > 0) {
-        whereClause.id = { in: messageIds }
-      }
-
-      const updatedMessages = await prisma.message.updateMany({
-        where: whereClause,
-        data: { isRead: true}
-      })
-      
-      return res 
-        .status(200)
-        .json(new ApiResponse(200, {updatedCount: updatedMessages.count}, "Message marked as read"))
-    } catch (error) {
-      console.error("Mark as read error: ", error);
-      throw new ApiError(500, "Failed to mark messages as read");
-    }
+  if (!userId) {
+    throw new ApiError(401, "User not authenticated");
   }
-);
+
+  if (typeof messageIds === "string") {
+    messageIds = [messageIds];
+  } else if (!Array.isArray(messageIds)) {
+    throw new ApiError(
+      400,
+      "messageIds must be a string or an array of strings"
+    );
+  }
+
+  const project = await prisma.project.findFirst({
+    where: {
+      projectDisplayId: projectId,
+      OR: [{ youtuberId: userId }, { editorId: userId }],
+    },
+  });
+
+  if (!project) {
+    throw new ApiError(404, "Project not found or access denied");
+  }
+
+  try {
+    const whereClause: any = {
+      projectId: project.id,
+      isRead: false,
+      //senderId: { not: userId },
+      // For now i am commenting this since I should test after using other credentials or we  can make isRead: true for sender also.
+    };
+
+    if (messageIds.length > 0) {
+      whereClause.id = { in: messageIds };
+    }
+    console.log("message Ids:", messageIds);
+    console.log("where clause: ", whereClause);
+    const updatedMessages = await prisma.message.updateMany({
+      where: whereClause,
+      data: { isRead: true },
+    });
+
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(
+          200,
+          { updatedCount: updatedMessages.count },
+          "Message marked as read"
+        )
+      );
+  } catch (error) {
+    console.error("Mark as read error: ", error);
+    throw new ApiError(500, "Failed to mark messages as read");
+  }
+});
 
 // C4. Get single message details
 const getMessageById = AsyncHandler(async (req: Request, res: Response) => {
@@ -279,11 +296,8 @@ const getMessageById = AsyncHandler(async (req: Request, res: Response) => {
     where: {
       id: messageId,
       project: {
-        OR: [
-          { youtuberId: userId },
-          { editorId: userId }
-        ]
-      }
+        OR: [{ youtuberId: userId }, { editorId: userId }],
+      },
     },
     include: {
       sender: {
@@ -291,31 +305,30 @@ const getMessageById = AsyncHandler(async (req: Request, res: Response) => {
           id: true,
           email: true,
           name: true,
-          avatar: true
-        }
+          avatar: true,
+        },
       },
       project: {
         select: {
           id: true,
           title: true,
-          projectDisplayId: true
-        }
-      }
-    }
-  })
+          projectDisplayId: true,
+        },
+      },
+    },
+  });
 
   if (!message) {
-    throw new ApiError(404, "Message not found or access denied")
+    throw new ApiError(404, "Message not found or access denied");
   }
 
   return res
     .status(200)
-    .json(new ApiResponse(200, message, "Message retrieved successfully"))
+    .json(new ApiResponse(200, message, "Message retrieved successfully"));
 });
 
 // C5. Delete message (soft delete by setting content to "[deleted]")
 const deleteMessage = AsyncHandler(async (req: Request, res: Response) => {
-
   const { messageId } = req.params;
   const userId = req.user?.id;
 
@@ -328,49 +341,55 @@ const deleteMessage = AsyncHandler(async (req: Request, res: Response) => {
       id: messageId,
       senderId: userId,
       project: {
-        OR: [
-          { youtuberId: userId },
-          { editorId: userId }
-        ]
-      }
-    }
-  })
+        OR: [{ youtuberId: userId }, { editorId: userId }],
+      },
+    },
+  });
 
-  if(!message) {
-    throw new ApiError(404, "Message not found or you don't have permission to delete it")
+  if (!message) {
+    throw new ApiError(
+      404,
+      "Message not found or you don't have permission to delete it"
+    );
   }
 
-  const twentyFourHoursAgo  = newDate(Date.now() - 24 * 60 * 60 * 1000);
+  const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
   if (message.createdAt < twentyFourHoursAgo) {
-    throw new ApiError(403, "Cannot delete messages older than 24 hours")
-  } 
+    throw new ApiError(403, "Cannot delete messages older than 24 hours");
+  }
 
   try {
-   const updatedMessage = await prisma.message.update({
-    where: { id: messageId }, 
-    data: {
-      content: "[This message was deleted]",
-      messageType: 'SYSTEM',
-      metadata: { ...message.metadata, deleted: true, deletedAt: new Date()}
-    },
-    include: {
-      sender: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          avatar: true
-        }
-      }
-    }
-   }) 
+    const updatedMessage = await prisma.message.update({
+      where: { id: messageId },
+      data: {
+        content: "[This message was deleted]",
+        messageType: "SYSTEM",
+        metadata: {
+          ...(typeof message.metadata === "object" && message.metadata !== null
+            ? message.metadata
+            : {}),
+          deleted: true,
+          deletedAt: new Date(),
+        },
+      },
+      include: {
+        sender: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            avatar: true,
+          },
+        },
+      },
+    });
 
-   return res
-    .status(200)
-    .json(new ApiResponse(200, updatedMessage, "Message deleted succefully"))
+    return res
+      .status(200)
+      .json(new ApiResponse(200, updatedMessage, "Message deleted succefully"));
   } catch (error) {
-    console.error("Delete message error: ", error)
-    throw new ApiError("Failed to delete message")
+    console.error("Delete message error: ", error);
+    throw new ApiError(500, "Failed to delete message");
   }
 });
 
@@ -394,19 +413,16 @@ const searchMessages = AsyncHandler(async (req: Request, res: Response) => {
   const project = await prisma.project.findFirst({
     where: {
       projectDisplayId: projectId,
-      OR: [
-        { youtuberId: userId },
-        { editorId: userId }
-      ]
-    }
-  })
+      OR: [{ youtuberId: userId }, { editorId: userId }],
+    },
+  });
 
   if (!project) {
     throw new ApiError(404, "Project not found or access denied");
   }
 
   const skip = (Number(page) - 1) * Number(limit);
-  const take = Math.min(Number(limit), 50)
+  const take = Math.min(Number(limit), 50);
 
   try {
     const [messages, totalCount] = await Promise.all([
@@ -415,8 +431,8 @@ const searchMessages = AsyncHandler(async (req: Request, res: Response) => {
           projectId: project.id,
           content: {
             contains: query.trim(),
-            mode:  "insensitive"
-          }
+            mode: "insensitive",
+          },
         },
         include: {
           sender: {
@@ -424,45 +440,48 @@ const searchMessages = AsyncHandler(async (req: Request, res: Response) => {
               id: true,
               email: true,
               name: true,
-              avatar: true
-            }
-          }
+              avatar: true,
+            },
+          },
         },
 
-        orderBy: { createdAt: 'desc'},
+        orderBy: { createdAt: "desc" },
         skip,
-        take
+        take,
       }),
       prisma.message.count({
         where: {
           projectId: project.id,
           content: {
             contains: query.trim(),
-            mode: 'insensitive'
-          }
-        }
-      })
-    ])
+            mode: "insensitive",
+          },
+        },
+      }),
+    ]);
 
-    const totalPages = Math.ceil(totalCount / take)
-     
-    return res
-      .status(200)
-      .json(new ApiResponse(200, {
-        messages: messages,
-        searchQuery: query.trim(),
-        pagination: {
-          currentPage: Number(page),
-          totalPages,
-          totalCount,
-          hasNextPage: Number(page) < totalPages,
-          hasPrevPage: Number(page) > 1 
-        }
-      }, "Search completed successfully"))
+    const totalPages = Math.ceil(totalCount / take);
+
+    return res.status(200).json(
+      new ApiResponse(
+        200,
+        {
+          messages: messages,
+          searchQuery: query.trim(),
+          pagination: {
+            currentPage: Number(page),
+            totalPages,
+            totalCount,
+            hasNextPage: Number(page) < totalPages,
+            hasPrevPage: Number(page) > 1,
+          },
+        },
+        "Search completed successfully"
+      )
+    );
   } catch (error) {
-    console.error("Search message error: ",
-    throw new ApiError(500, "Failed to search messages")
-    )
+    console.error("Search message error: ", error);
+    throw new ApiError(500, "Failed to search messages");
   }
 });
 
