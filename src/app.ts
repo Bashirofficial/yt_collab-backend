@@ -1,12 +1,15 @@
 import express from "express";
 import cors from "cors";
+import http from "http";
 import cookieParser from "cookie-parser";
 import morgan from "morgan";
 import { errorHandler } from "./middlewares/errorHandler.middleware";
 import passport from "./controllers/googleAuth.controller";
 import session from "express-session";
+import { initializeMessageSocket } from "./websockets/messageSocket";
 
 const app = express();
+const server = http.createServer(app);
 
 app.use(
   cors({
@@ -37,6 +40,7 @@ app.get("/", (req, res) => {
   res.send("🚀 API is running");
 });
 
+//Routes
 import userRouter from "./routes/user.route";
 import projectRouter from "./routes/project.route";
 import googlAuthRouter from "./routes/googleAuth.route";
@@ -50,4 +54,10 @@ app.use("/api/v1/projects/:id/files", fileRouter);
 app.use("/api/v1/users", messageRouter);
 app.use(errorHandler);
 
-export { app };
+// Initialize Websocket
+const io = initializeMessageSocket(server);
+
+// Global config
+app.set("io", io);
+
+export { app, server };
