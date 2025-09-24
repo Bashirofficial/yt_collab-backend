@@ -385,3 +385,52 @@ export const initializeMessageSocket = (httpServer: HTTPServer) => {
 };
 
 // Helper function to send system messages
+export const sendSystemMessage = async (
+  projectId: string,
+  content: string,
+  metadata: any = {}
+) => {
+  try {
+    const project = await prisma.project.findFirst({
+      where: { projectDisplayId: projectId },
+    });
+
+    if (!project) return;
+
+    const message = await prisma.message.create({
+      data: {
+        projectId: project.id,
+        senderId: "system",
+        content,
+        messageType: "SYSTEM",
+        metadata,
+      },
+      include: {
+        sender: {
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            avatar: true,
+          },
+        },
+      },
+    });
+
+    return message;
+  } catch (error) {
+    console.error(`Send system message error: `, error);
+  }
+};
+
+export const notifyFileUpload = (
+  projectId: string,
+  fileName: string,
+  uploaderName: string
+) => {
+  sendSystemMessage(
+    projectId,
+    `${uploaderName} uploaded a new file: ${fileName}`,
+    { type: "FILE_UPLOAD", fileName }
+  );
+};
