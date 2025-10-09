@@ -32,7 +32,7 @@ router.get(
         .cookie("accessToken", accessToken, options)
         .cookie("refreshToken", refreshToken, options)
         .redirect(
-          process.env.CLIENT_SUCCESS_URL || "http://localhost:3000/dashboard"
+          process.env.CLIENT_SUCCESS_URL || "http://localhost:3000/dashboard/youtuber"
         ); // Redirect to frontend
       // Or if you prefer JSON response:
       // .json(new ApiResponse(200, { user: req.user, accessToken, refreshToken }, "Google login successful"));
