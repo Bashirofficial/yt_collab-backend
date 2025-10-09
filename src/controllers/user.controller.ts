@@ -118,7 +118,7 @@ const login = AsyncHandler(async (req: Request, res: Response) => {
 
   const options: CookieOptions = {
     httpOnly: true,
-    secure: true, //process.env.NODE_ENV === "production", // Only secure in production
+    secure: process.env.NODE_ENV === "production", // Only secure in production
     sameSite: "strict",
   };
 
@@ -166,4 +166,15 @@ const logout = AsyncHandler(async (req: Request, res: Response) => {
     .json(new ApiResponse(201, {}, "User logged out Successfully"));
 });
 
-export { refreshAccessToken, register, login, logout };
+const verifyUser = AsyncHandler(async (req: Request, res: Response) => {
+  const user = (req as any).user;
+
+  if (!user) {
+    throw new ApiError(401, "Unauthorized: User not authenticated");
+  }
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, { user }, "User verified successfully"));
+});
+export { refreshAccessToken, register, login, logout, verifyUser };
