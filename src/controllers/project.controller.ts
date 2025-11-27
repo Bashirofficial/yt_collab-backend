@@ -4,26 +4,35 @@ import { ApiError } from "../utils/ApiError";
 import { ApiResponse } from "../utils/ApiResponse";
 import { AsyncHandler } from "../utils/AsyncHandler";
 import generateProjectCode from "../utils/generateProjectCode";
-
+import { upload } from "../middlewares/multer.middleware";
+import multer from "multer";
+import { v4 as uuidv4 } from "uuid";
+import { uploadToR2 } from "../utils/r2.util";
+import path from "path";
 //--------- Controllers (C) ---------//
 
 // C1. Create a new project
 const createProject = AsyncHandler(async (req: Request, res: Response) => {
-  const {
-    title,
-    videoTitle,
-    description,
-    videoDescription,
-    keywords,
-    visibility,
-    thumbnail,
-    instructions,
-    projectType,
-    dueDate,
-    fullAccess,
-    uploadAccess,
-    downloadAccess,
-    shareAccess,
+
+  upload(req, res, async (err) => {
+    if (err instanceof multer.MulterError) {
+      throw new ApiError(400, `Error occured while uploading thumbnail: ${err.message}`)
+    }
+    
+    const {
+      title,
+      videoTitle,
+      description,
+      videoDescription,
+      keywords,
+      visibility,
+      instructions,
+      projectType,
+      dueDate,
+      fullAccess,
+      uploadAccess,
+      downloadAccess,
+      shareAccess,
   } = req.body;
 
   if (!req.user) {
@@ -35,21 +44,44 @@ const createProject = AsyncHandler(async (req: Request, res: Response) => {
       "Access denied: Only YouTubers can create projects"
     );
   }
-
+  
   if (!title || !videoTitle) {
     throw new ApiError(400, "Title and video title are required");
   }
-
-  const project = await prisma.project.create({
+  
+  const ProjectId: string = generateProjectCode();
+  let thumbnailUrl: string | null = null;
+  if (req.file && req.file.mimetype.startsWith("image/")) {
+    const fileExtension = path.extname(req.file.originalname);
+    const fileName = `thumbnail_${uuidv4()}${fileExtension}`
+    
+    thumbnailUrl = await uploadToR2(
+      req.file.buffer,
+      fileName,
+      req.file.mimetype,
+      ProjectId
+    )
+  }
+  
+  const fullAccessBool =
+  fullAccess === undefined ? true : String(fullAccess) === "true";
+  const uploadAccessBool =
+  uploadAccess === undefined ? true : String(uploadAccess) === "true";
+  const downloadAccessBool =
+    downloadAccess === undefined ? true : String(downloadAccess) === "true";
+    const shareAccessBool =
+    shareAccess === undefined ? false : String(shareAccess) === "true";
+    
+    const project = await prisma.project.create({
     data: {
       title,
-      projectDisplayId: generateProjectCode(),
+      projectDisplayId: ProjectId,
       videoTitle,
       description,
       videoDescription,
-      keywords: keywords || [],
+      keywords: keywords ? keywords.split(',').map((k: string) => k.trim()) :  [],
       visibility: visibility || "PUBLIC",
-      thumbnail,
+      thumbnail: thumbnailUrl,
       instructions,
       projectType: projectType || "SINGLE",
       dueDate: dueDate ? new Date(dueDate) : null,
@@ -57,10 +89,10 @@ const createProject = AsyncHandler(async (req: Request, res: Response) => {
       // Create permissions using nested create
       permissions: {
         create: {
-          fullAccess: fullAccess ?? true,
-          uploadAccess: uploadAccess ?? true,
-          downloadAccess: downloadAccess ?? true,
-          shareAccess: shareAccess ?? false,
+          fullAccess: fullAccessBool,
+          uploadAccess: uploadAccessBool,
+          downloadAccess: downloadAccessBool,
+          shareAccess: shareAccessBool,
         },
       },
     },
@@ -77,12 +109,13 @@ const createProject = AsyncHandler(async (req: Request, res: Response) => {
     },
   });
 
-  console.log("Project Details: ", project);
-  return res
-    .status(201)
-    .json(
-      new ApiResponse(200, project, "New project has been successully created")
-    );
+    console.log("Project Details: ", project);
+    return res
+      .status(201)
+      .json(
+        new ApiResponse(200, project, "New project has been successully created")
+      );
+  })
 });
 
 // C2. Get project details by project display id
