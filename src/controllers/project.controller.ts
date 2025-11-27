@@ -77,6 +77,7 @@ const createProject = AsyncHandler(async (req: Request, res: Response) => {
     },
   });
 
+  console.log("Project Details: ", project);
   return res
     .status(201)
     .json(
@@ -135,7 +136,32 @@ const getProject = AsyncHandler(async (req: Request, res: Response) => {
     .json(new ApiResponse(200, project, "Project retrieved successfully"));
 });
 
-// C3. Edit an existing project
+// C3. Get project ids
+const getProjectIds = AsyncHandler(async (req: Request, res: Response) => { 
+
+  if (!req.user) {
+    throw new ApiError(401, "Unauthorized: User not authenticated.");
+  }
+
+  const projects = await prisma.project.findMany({
+    where: {
+      OR: [
+        { youtuberId: req.user.id },   
+        { editorId: req.user.id },      
+      ],
+    },
+    select: {
+      projectDisplayId: true,   
+    },
+  });
+
+  const projectIds = projects.map((project) => project.projectDisplayId)
+  return res
+    .status(200)
+    .json(new ApiResponse(200, projectIds, "Project Display IDs retrieved successfully"));
+});
+
+// C4. Edit an existing project
 const editProject = AsyncHandler(async (req: Request, res: Response) => {
   const { projectDisplayId } = req.params;
   const {
@@ -261,4 +287,4 @@ const editProject = AsyncHandler(async (req: Request, res: Response) => {
   }
 });
 
-export { createProject, getProject, editProject };
+export { createProject, getProject, getProjectIds, editProject };
